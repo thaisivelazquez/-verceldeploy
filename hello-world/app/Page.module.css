@@ -1,0 +1,289 @@
+
+body {
+    margin: 0;
+    background: #000;
+}
+
+.appBackground {
+    min-height: 100vh;
+    background: #000;
+    color: white;
+}
+
+
+
+.centeredContainer {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    flex-direction: column;
+    background: #000;
+    color: white;
+}
+
+.centeredInner {
+    text-align: center;
+}
+
+.assignmentTitle {
+    margin-bottom: 20px;
+    font-weight: 600;
+}
+
+.loggedInText {
+    margin-bottom: 12px;
+    color: #d1d5db;
+}
+
+/* ===================== */
+/* GENERIC BUTTON */
+/* (Used for Load More) */
+/* ===================== */
+
+.button {
+    padding: 12px 24px;
+    font-size: 16px;
+    background-color: #ec4899;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.button:hover {
+    background-color: #db2777;
+    box-shadow:
+            0 0 15px #ec4899,
+            0 0 35px rgba(236, 72, 153, 0.6);
+    transform: translateY(-2px);
+}
+
+/* ===================== */
+/* PAGE WRAPPER */
+/* ===================== */
+
+.pageWrapper {
+    padding: 40px 60px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.pageWrapperCentered {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 40px;
+}
+
+.pageTitle {
+    margin-bottom: 20px;
+    font-weight: 600;
+    color: white;
+}
+
+/* ===================== */
+/* NAVBAR */
+/* ===================== */
+
+.navbar {
+    width: 100%;
+    padding: 16px 60px;
+    background: #111;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #222;
+    box-sizing: border-box;
+}
+
+.navInner {
+    position: relative;
+    display: flex;
+    background: #1f1f1f;
+    border-radius: 999px;
+    padding: 6px;
+}
+
+/* Tabs (NOT pink) */
+.navItem {
+    position: relative;
+    z-index: 2;
+    padding: 10px 28px;
+    border: none;
+    background: transparent;
+    color: #9ca3af;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 999px;
+    transition: color 0.3s ease;
+    font-size: 14px;
+}
+
+.navItem:hover {
+    color: white;
+}
+
+.navItemActive {
+    color: white;
+}
+
+/* Pink glowing slider */
+.navIndicator {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    height: calc(100% - 12px);
+    width: calc((100% - 12px) / 2);
+    background: #ec4899;
+    border-radius: 999px;
+    transition: transform 0.35s ease;
+    z-index: 1;
+    box-shadow:
+            0 0 12px #ec4899,
+            0 0 30px rgba(236, 72, 153, 0.6);
+}
+
+.navRight {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.navEmail {
+    font-size: 14px;
+    color: #9ca3af;
+}
+
+/* Pink glowing Sign Out */
+.navLogout {
+    background: #ec4899;
+    border: none;
+    padding: 8px 18px;
+    border-radius: 8px;
+    color: white;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.navLogout:hover {
+    background: #db2777;
+    box-shadow:
+            0 0 15px #ec4899,
+            0 0 35px rgba(236, 72, 153, 0.6);
+    transform: translateY(-2px);
+}
+
+/* ===================== */
+/* SWIPE CARD */
+/* ===================== */
+
+.cardStack {
+    position: relative;
+    width: 380px;
+    height: 560px;
+    margin: 30px 0;
+}
+
+.swipeCard {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background: white;
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+    display: flex;
+    flex-direction: column;
+    cursor: grab;
+}
+
+.cardImage {
+    width: 100%;
+    height: 75%;
+    object-fit: cover;
+}
+
+.cardContent {
+    /*padding: 18px;*/
+    background: white;
+    height: 25%;
+    display: center;
+    flex-direction: column;
+    gap: 8px;
+    color: black;
+}
+
+.cardCaption {
+    /*font-size: 28px;*/
+    font-weight: 700;
+
+    text-align: center;
+    /*margin-bottom: 12px;*/
+}
+
+.cardDescription {
+    font-size: 29px;
+    color: black;
+}
+
+
+.loadMoreCard {
+    width: 380px;
+    height: 560px;
+    border-radius: 24px;
+    background: #111;
+    border: 1px solid #222;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* ===================== */
+/* VOTE BUTTONS */
+/* ===================== */
+
+.voteControls {
+    display: flex;
+    gap: 20px;
+}
+
+/* Red glow */
+.downvoteButtonLarge {
+    padding: 14px 24px;
+    border-radius: 30px;
+    border: none;
+    background: #ff4d4d;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.downvoteButtonLarge:hover {
+    box-shadow:
+            0 0 15px #ff4d4d,
+            0 0 30px rgba(255, 77, 77, 0.6);
+    transform: translateY(-2px);
+}
+
+/* Green glow */
+.upvoteButtonLarge {
+    padding: 14px 24px;
+    border-radius: 30px;
+    border: none;
+    background: #4CAF50;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.upvoteButtonLarge:hover {
+    box-shadow:
+            0 0 15px #4CAF50,
+            0 0 30px rgba(76, 175, 80, 0.6);
+    transform: translateY(-2px);
+}

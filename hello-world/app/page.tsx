@@ -1,232 +1,269 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase/client'
+import React, { useState, useEffect, useMemo } from 'react'
+import { motion } from 'framer-motion'
+import styles from './Page.module.css'
 
 export default function Page() {
     const [user, setUser] = useState<any>(null)
-    const [tables, setTables] = useState<any[]>([])
-    const [showTables, setShowTables] = useState(false)
+    const [images, setImages] = useState<Record<string, string>>({})
+    const [captions, setCaptions] = useState<any[]>([])
+    const [activeTab, setActiveTab] = useState<'Rating' | 'Table'>('Rating')
+    const [page, setPage] = useState(0)
+    const [currentIndex, setCurrentIndex] = useState(0)
 
+    const ITEMS_PER_PAGE = 20
+
+    /* ================= AUTH ================= */
 
     useEffect(() => {
         const getSession = async () => {
             const { data: { session } } = await supabase.auth.getSession()
             setUser(session?.user ?? null)
         }
+
         getSession()
 
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            setUser(session?.user ?? null)
-        })
+        const { data: { subscription } } =
+            supabase.auth.onAuthStateChange((_event, session) => {
+                setUser(session?.user ?? null)
+            })
 
         return () => subscription.unsubscribe()
     }, [])
 
+    /* ================= DATA ================= */
 
-    const loginWithGoogle = async () => {
-        await supabase.auth.signInWithOAuth({
-            provider: 'google',
-            options: {
-                redirectTo: `${window.location.origin}/auth/callback`,
-                queryParams: {
-                    prompt: 'select_account',
-                },
-            },
-        })
-    }
+    useEffect(() => {
+        if (activeTab === 'Rating') loadRatingData()
+    }, [activeTab, page])
 
-    const handleLogout = async () => {
-        await supabase.auth.signOut()
-        setUser(null)
-        setShowTables(false)
-
-    }
-
-    const fetchTables = async () => {
-        const { data, error } = await supabase
-            .from('caption_examples')
-            .select('*')
-
-        if (error) {
-            console.error('Error fetching tables:', error)
-            return
+    const loadRatingData = async () => {
+        const captionsData = await fetchCaptions(page)
+        if (captionsData?.length) {
+            const ids = [...new Set(captionsData.map((c: any) => c.image_id))]
+            await fetchImages(ids)
         }
-
-        setTables(data ?? [])
-        setShowTables(true)
     }
 
+    const fetchCaptions = async (currentPage: number) => {
+        const from = currentPage * ITEMS_PER_PAGE
+        const to = from + ITEMS_PER_PAGE - 1
+
+        const { data, error } = await supabase
+            .from('captions')
+            .select('*')
+            .range(from, to)
+            .order('id', { ascending: true })
+
+        if (error) return []
+
+        // 🔥 Replace instead of append
+        setCaptions(data ?? [])
+
+        return data ?? []
+    }
+
+    const fetchImages = async (imageIds: string[]) => {
+        if (!imageIds.length) return
+
+        const { data } = await supabase
+            .from('images')
+            .select('id, url')
+            .in('id', imageIds)
+
+        const dict: Record<string, string> = {}
+        data?.forEach(img => dict[img.id] = img.url)
+
+        setImages(dict) // 🔥 replace instead of merge
+    }
+
+    const submitVote = async (vote_value: number, caption_id: string) => {
+        if (!user) return
+
+        await supabase.from('caption_votes').insert([{
+            created_datetime_utc: new Date().toISOString(),
+            modified_datetime_utc: new Date().toISOString(),
+            profile_id: user.id,
+            caption_id,
+            vote_value
+        }])
+    }
+
+    const validCaptions = useMemo(
+        () => captions.filter(c => images[c.image_id]),
+        [captions, images]
+    )
+
+    const handleVote = (value: number, id: string) => {
+        submitVote(value, id)
+        setCurrentIndex(i => i + 1)
+    }
 
     if (!user) {
         return (
-            <div style={centeredContainerStyle}>
-                <div style={{ textAlign: 'center' }}>
-                    <h2 style={{ marginBottom: '20px' }}>Assignment #3: Protected Route</h2>
-                    <button
-                        onClick={loginWithGoogle}
-                        style={{ ...buttonStyle, backgroundColor: '#4285F4' }}
-                    >
-                        Sign in with Google
-                    </button>
-                </div>
-            </div>
-        )
-    }
-
-
-    if (!showTables) {
-        return (
-            <div style={centeredContainerStyle}>
-                <div style={{ textAlign: 'center' }}>
-                    <p style={{ marginBottom: '10px' }}>Logged in as: {user.email}</p>
-                    <button onClick={fetchTables} style={buttonStyle}>
-                        Hello World
-                    </button>
-                    <br />
-                    <button onClick={handleLogout} style={logoutLinkStyle}>
-                        Sign Out
-                    </button>
+            <div className={styles.appBackground}>
+                <div className={styles.centeredContainer}>
+                    <div className={styles.centeredInner}>
+                        <h2 className={styles.pageTitle}>Welcome to caption rating</h2>
+                        <button
+                            onClick={() =>
+                                supabase.auth.signInWithOAuth({
+                                    provider: 'google',
+                                    options: {
+                                        redirectTo: `${window.location.origin}/auth/callback`,
+                                    },
+                                })
+                            }
+                            className={styles.button}
+                        >
+                            Sign in with Google
+                        </button>
+                    </div>
                 </div>
             </div>
         )
     }
 
     return (
-        <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h1>caption_examples tables</h1>
-                <button onClick={handleLogout} style={logoutButtonStyle}>Sign Out</button>
-            </div>
+        <div className={styles.appBackground}>
+            <Navbar
+                user={user}
+                onLogout={async () => {
+                    await supabase.auth.signOut()
+                    setUser(null)
+                }}
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+            />
 
-            <table style={tableStyle}>
-                <thead>
-                <tr style={{ backgroundColor: '#f3f4f6' }}>
-                    <th style={headerCellStyle}>ID</th>
-                    <th style={headerCellStyle}>Created Date</th>
-                    <th style={headerCellStyle}>Modified Date</th>
-                    <th style={headerCellStyle}>Description</th>
-                    <th style={headerCellStyle}>Caption</th>
-                    <th style={headerCellStyle}>Explanation</th>
-                    <th style={headerCellStyle}>Priority</th>
-                    <th style={headerCellStyle}>Image ID</th>
-                </tr>
-                </thead>
-                <tbody>
-                {tables.map((table: any) => (
-                    <tr key={table.id} style={rowStyle}>
-                        <td style={cellStyle}>{table.id}</td>
-                        <td style={cellStyle}>{formatDate(table.created_datetime_utc)}</td>
-                        <td style={cellStyle}>{formatDate(table.modified_created_datetime_utc)}</td>
-                        <td style={cellStyle}>{table.image_description}</td>
-                        <td style={cellStyle}>{table.caption}</td>
-                        <td style={cellStyle}>{table.explanation}</td>
-                        <td style={cellStyle}>
-                            <PriorityBadge priority={table.priority} />
-                        </td>
-                        <td style={cellStyle}>{table.image_id}</td>
-                    </tr>
-                ))}
-                </tbody>
-            </table>
+            <div className={styles.pageWrapperCentered}>
+                <h1 className={styles.pageTitle}>Rate Captions</h1>
+
+                <div className={styles.cardStack}>
+                    {validCaptions
+                        .slice(currentIndex, currentIndex + 2)
+                        .reverse()
+                        .map((caption, index) => {
+                            const isTop = index === 0
+
+                            return (
+                                <motion.div
+                                    key={caption.id}
+                                    className={styles.swipeCard}
+                                    drag={isTop ? "x" : false}
+                                    dragConstraints={{ left: 0, right: 0 }}
+                                    onDragEnd={(e, info) => {
+                                        if (!isTop) return
+                                        if (info.offset.x > 120) handleVote(1, caption.id)
+                                        if (info.offset.x < -120) handleVote(-1, caption.id)
+                                    }}
+                                    initial={{ scale: isTop ? 1 : 0.95 }}
+                                    animate={{
+                                        scale: isTop ? 1 : 0.95,
+                                        y: isTop ? 0 : 10
+                                    }}
+                                    style={{ zIndex: isTop ? 2 : 1 }}
+                                >
+                                    <img
+                                        src={images[caption.image_id]}
+                                        className={styles.cardImage}
+                                        alt=""
+                                    />
+
+                                    <div className={styles.cardContent}>
+                                        <h3 className={styles.cardCaption}>
+                                            {caption.caption}
+                                        </h3>
+                                        <p className={styles.cardDescription}>
+                                            {caption.content}
+                                        </p>
+                                    </div>
+                                </motion.div>
+                            )
+                        })}
+
+                    {currentIndex >= validCaptions.length && (
+                        <div className={styles.loadMoreCard}>
+                            <button
+                                onClick={() => {
+                                    setCurrentIndex(0)
+                                    setPage(p => p + 1)
+                                }}
+                                className={styles.button}
+                            >
+                                Load More Images
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                {validCaptions[currentIndex] && (
+                    <div className={styles.voteControls}>
+                        <button
+                            className={styles.downvoteButtonLarge}
+                            onClick={() =>
+                                handleVote(-1, validCaptions[currentIndex].id)
+                            }
+                        >
+                            ⬅ Downvote
+                        </button>
+
+                        <button
+                            className={styles.upvoteButtonLarge}
+                            onClick={() =>
+                                handleVote(1, validCaptions[currentIndex].id)
+                            }
+                        >
+                            Upvote ➡
+                        </button>
+                    </div>
+                )}
+            </div>
         </div>
     )
 }
 
+/* ================= NAVBAR ================= */
 
-
-const centeredContainerStyle: React.CSSProperties = {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    height: '100vh',
-    flexDirection: 'column'
-}
-
-const buttonStyle: React.CSSProperties = {
-    padding: '12px 24px',
-    fontSize: '18px',
-    backgroundColor: '#007bff',
-    color: 'white',
-    border: 'none',
-    borderRadius: '6px',
-    cursor: 'pointer',
-}
-
-const logoutButtonStyle: React.CSSProperties = {
-    padding: '8px 16px',
-    backgroundColor: '#6b7280',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer'
-}
-
-const logoutLinkStyle: React.CSSProperties = {
-    marginTop: '20px',
-    background: 'none',
-    border: 'none',
-    color: '#ef4444',
-    textDecoration: 'underline',
-    cursor: 'pointer'
-}
-
-const tableStyle: React.CSSProperties = {
-    width: '100%',
-    borderCollapse: 'separate',
-    borderSpacing: '0 10px',
-    fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-}
-
-const rowStyle: React.CSSProperties = {
-    backgroundColor: '#fff',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-    borderRadius: '8px',
-}
-
-const headerCellStyle: React.CSSProperties = {
-    textAlign: 'left',
-    padding: '12px 15px',
-    fontWeight: 600,
-    color: '#374151',
-    fontSize: '14px',
-    borderBottom: '2px solid #e5e7eb',
-}
-
-const cellStyle: React.CSSProperties = {
-    padding: '12px 15px',
-    verticalAlign: 'top',
-    fontSize: '14px',
-    color: '#4b5563',
-    maxWidth: '200px',
-    overflowWrap: 'break-word',
-}
-
-function formatDate(dateStr: string) {
-    if (!dateStr) return '-'
-    const date = new Date(dateStr)
-    return date.toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-    })
-}
-
-function PriorityBadge({ priority }: { priority: any }) {
-    let bgColor = '#d1fae5'
-    let textColor = '#065f46'
-    if (priority === 'high') { bgColor = '#fee2e2'; textColor = '#b91c1c' }
-    else if (priority === 'medium') { bgColor = '#fef3c7'; textColor = '#a16207' }
+function Navbar({ user, onLogout, activeTab, setActiveTab }: any) {
+    const items = ['Rating', 'Table']
 
     return (
-        <span style={{
-            backgroundColor: bgColor, color: textColor,
-            padding: '4px 8px', borderRadius: '12px',
-            fontWeight: 600, fontSize: '12px',
-            display: 'inline-block', minWidth: '60px', textAlign: 'center',
-        }}>
-            {priority ?? '-'}
-        </span>
+        <div className={styles.navbar}>
+            <div className={styles.navInner}>
+                <div
+                    className={styles.navIndicator}
+                    style={{
+                        transform:
+                            activeTab === 'Rating'
+                                ? 'translateX(0%)'
+                                : 'translateX(100%)'
+                    }}
+                />
+                {items.map((item) => (
+                    <button
+                        key={item}
+                        onClick={() => setActiveTab(item)}
+                        className={`${styles.navItem} ${
+                            activeTab === item ? styles.navItemActive : ''
+                        }`}
+                    >
+                        {item}
+                    </button>
+                ))}
+            </div>
+
+            <div className={styles.navRight}>
+                <span className={styles.navEmail}>{user?.email}</span>
+                <button
+                    onClick={onLogout}
+                    className={styles.navLogout}
+                >
+                    Sign Out
+                </button>
+            </div>
+        </div>
     )
 }
