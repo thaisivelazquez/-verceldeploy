@@ -177,13 +177,13 @@ body {
 }
 
 /* ===================== */
-/* SWIPE CARD */
+/* SWIPE CARD (HORIZONTAL) */
 /* ===================== */
 
 .cardStack {
     position: relative;
-    width: 380px;
-    height: 560px;
+    width: 720px;
+    height: 300px; /* 🔥 taller */
     margin: 30px 0;
 }
 
@@ -192,53 +192,73 @@ body {
     width: 100%;
     height: 100%;
     background: white;
-    border-radius: 24px;
+    border-radius: 20px;
     overflow: hidden;
     box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+
+    display: flex;
+    flex-direction: row;
+
+    cursor: grab;
+    touch-action: none;
+}
+
+/* LEFT SIDE (TEXT) */
+.cardContent {
+    flex: 1;
+    padding: 28px;
     display: flex;
     flex-direction: column;
-    cursor: grab;
+    justify-content: center;
+    text-align: left;
 }
 
-.cardImage {
-    width: 100%;
-    height: 75%;
-    object-fit: cover;
-}
-
-.cardContent {
-    /*padding: 18px;*/
-    background: white;
-    height: 25%;
-    display: center;
-    flex-direction: column;
-    gap: 8px;
-    color: black;
-}
-
+/* TITLE */
 .cardCaption {
-    /*font-size: 28px;*/
+    font-size: 22px;
     font-weight: 700;
-
-    text-align: center;
-    /*margin-bottom: 12px;*/
-}
-
-.cardDescription {
-    font-size: 29px;
     color: black;
+    margin-bottom: 10px;
 }
 
+/* DESCRIPTION */
+.cardDescription {
+    font-size: 16px;
+    color: #555;
+    line-height: 1.5;
+}
 
+/* RIGHT SIDE (IMAGE) */
+.cardImage {
+    width: 300px;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+
+    border-left: 2px solid black; /* 🔥 black separator line */
+}
+
+/* LOAD MORE CARD */
 .loadMoreCard {
-    width: 380px;
-    height: 560px;
-    border-radius: 24px;
+    width: 720px;
+    height: 300px;
+    border-radius: 20px;
     background: #111;
     border: 1px solid #222;
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+/* Swipe glow effect */
+.swipeCard.swipe-left {
+    box-shadow: 0 0 30px 5px rgba(255, 0, 0, 0.7); /* red glow */
+    border: 2px solid red;
+}
+
+.swipeCard.swipe-right {
+    box-shadow: 0 0 30px 5px rgba(0, 255, 0, 0.7); /* green glow */
+    border: 2px solid green;
 }
 
 /* ===================== */
@@ -286,4 +306,190 @@ body {
             0 0 15px #4CAF50,
             0 0 30px rgba(76, 175, 80, 0.6);
     transform: translateY(-2px);
+}
+
+/* ===================== */
+/* UPLOAD TAB*/
+/* ===================== */
+.uploadCard {
+    margin-top: 30px;
+    width: 420px;
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 24px 24px 20px;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.uploadDropzone {
+    border: 2px dashed rgba(148, 163, 184, 0.8);
+    border-radius: 14px;
+    padding: 32px 20px;
+    text-align: center;
+    cursor: pointer;
+    position: relative;
+    background: #f8fafc;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+/* pink glow matching buttons */
+.uploadDropzone:hover,
+.uploadDropzone:focus-within {
+    border-color: #ff4fd8;
+    box-shadow: 0 0 0 1px rgba(255, 79, 216, 0.5),
+    0 0 18px rgba(255, 79, 216, 0.85);
+    background: #fdf2ff;
+}
+
+.uploadIcon {
+    width: 60px;
+    height: 60px;
+    border-radius: 16px;
+    margin: 0 auto 12px;
+    background: linear-gradient(135deg, #e2f3ff, #d1fae5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.uploadIcon::before {
+    content: "";
+    width: 32px;
+    height: 22px;
+    border-radius: 6px;
+    background: #ffffff;
+    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
+}
+
+.uploadTitle {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.uploadBrowse {
+    color: #ff4fd8;
+}
+
+.uploadSubtext {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: #64748b;
+}
+
+.uploadInput {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+/* file row */
+
+.fileRow {
+    margin-top: 18px;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.fileLeft {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.fileAvatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.fileMeta {
+    display: flex;
+    flex-direction: column;
+}
+
+.fileName {
+    font-size: 13px;
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.fileAttached {
+    font-weight: 500;
+    color: #16a34a;
+    margin-left: 4px;
+    font-size: 12px;
+}
+
+.fileSize {
+    font-size: 12px;
+    color: #64748b;
+}
+
+.fileRight {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.iconButton {
+    border: none;
+    background: transparent;
+    color: #ef4444;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.fileStatusIcon {
+    font-size: 16px;
+    color: #16a34a;
+}
+
+/* progress bar */
+
+.progressBarOuter {
+    margin-top: 8px;
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+    background: #e2e8f0;
+    overflow: hidden;
+}
+
+.progressBarInner {
+    height: 100%;
+    background: #22c55e;
+    border-radius: inherit;
+    transition: width 0.2s ease;
+}
+
+.deleteIconButton {
+    border: none;
+    background: transparent;
+    color: #ef4444;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0 2px;
+}
+.deleteIconButton:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
 }
