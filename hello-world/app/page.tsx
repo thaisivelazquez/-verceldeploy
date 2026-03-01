@@ -274,7 +274,7 @@ export default function Page() {
             <div className={styles.appBackground}>
                 <div className={styles.centeredContainer}>
                     <div className={styles.centeredInner}>
-                        <h2 className={styles.pageTitle}>Welcome to caption rating</h2>
+                        <h2 className={styles.pageTitle}>The Humor Project</h2>
                         <button
                             onClick={() =>
                                 supabase.auth.signInWithOAuth({
