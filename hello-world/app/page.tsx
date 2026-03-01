@@ -35,7 +35,7 @@ export default function Page() {
     const ITEMS_PER_PAGE = 20
     const DISPLAY_LIMIT = 10
 
-    /* ================= AUTH ================= */
+
 
     useEffect(() => {
         const getSession = async () => {
@@ -50,7 +50,7 @@ export default function Page() {
         return () => subscription.unsubscribe()
     }, [])
 
-    /* ================= DATA ================= */
+
 
     useEffect(() => {
         if (activeTab === 'Rating') loadRatingData()
@@ -88,10 +88,9 @@ export default function Page() {
         setImages(dict)
     }
 
-    /* ================= MY UPLOADS ================= */
 
-    // Each saved entry is: { entryId, imageUrl, caption, saved }
-    // entryId = captionId so each caption+image is its own card
+
+
     const saveCaption = (userId: string, imageUrl: string, captionId: string, captionText: string) => {
         const key = `saved_${userId}`
         const existing: any[] = JSON.parse(localStorage.getItem(key) ?? '[]')
@@ -123,7 +122,7 @@ export default function Page() {
         saveCaption(user.id, uploadedImageUrl, current.id, current.caption || current.content)
     }
 
-    /* ================= UPLOAD FLOW ================= */
+
 
     const handleFileUpload = async () => {
         if (!user || !selectedFile) return
@@ -239,7 +238,7 @@ export default function Page() {
         }
     }
 
-    /* ================= VOTING ================= */
+
 
     const submitVote = async (vote_value: number, caption_id: string) => {
         if (!user) return
@@ -268,7 +267,7 @@ export default function Page() {
         setVotedIds(prev => new Set([...prev, id]))
     }
 
-    /* ================= RENDER ================= */
+
 
     if (!user) {
         return (
@@ -306,7 +305,7 @@ export default function Page() {
                 onEmailClick={handleOpenUploads}
             />
 
-            {/* ================= MY UPLOADS MODAL ================= */}
+
             {showUploads && (
                 <div className={styles.modalOverlay} onClick={() => setShowUploads(false)}>
                     <div className={styles.modalBox} onClick={e => e.stopPropagation()}>
@@ -388,7 +387,7 @@ export default function Page() {
 
                     {uploadSuccess && uploadedImageUrl && uploadedCaptions.length > 0 ? (
                         <div className={styles.uploadPreviewSection}>
-                            {/* Card matching rating card format exactly */}
+
                             <div className={`${styles.ratingCard} ${styles.uploadPreviewCard}`}>
                                 <div className={styles.ratingImageWrapper}>
                                     <img
@@ -551,7 +550,7 @@ export default function Page() {
     )
 }
 
-/* ================= NAVBAR ================= */
+
 
 function Navbar({ user, onLogout, activeTab, setActiveTab, onEmailClick }: any) {
     const items: ('Rating' | 'Upload')[] = ['Rating', 'Upload']
