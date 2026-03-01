@@ -35,7 +35,7 @@ export default function Page() {
     const ITEMS_PER_PAGE = 20
     const DISPLAY_LIMIT = 10
 
-
+    /* ================= AUTH ================= */
 
     useEffect(() => {
         const getSession = async () => {
@@ -50,7 +50,35 @@ export default function Page() {
         return () => subscription.unsubscribe()
     }, [])
 
+    /* ================= LOAD PERSISTED VOTES ================= */
 
+    // On user login, load voted IDs from both localStorage AND Supabase
+    useEffect(() => {
+        if (!user) return
+        const loadVotedIds = async () => {
+            // 1. Load from localStorage first (fast)
+            const localKey = `voted_${user.id}`
+            const localVoted: string[] = JSON.parse(localStorage.getItem(localKey) ?? '[]')
+
+            // 2. Also fetch from Supabase (authoritative, catches other devices)
+            const { data } = await supabase
+                .from('caption_votes')
+                .select('caption_id')
+                .eq('profile_id', user.id)
+
+            const dbVoted = data?.map((r: any) => r.caption_id) ?? []
+
+            // Merge both sources
+            const merged = new Set([...localVoted, ...dbVoted])
+            setVotedIds(merged)
+
+            // Sync merged back to localStorage
+            localStorage.setItem(localKey, JSON.stringify([...merged]))
+        }
+        loadVotedIds()
+    }, [user])
+
+    /* ================= DATA ================= */
 
     useEffect(() => {
         if (activeTab === 'Rating') loadRatingData()
@@ -88,8 +116,7 @@ export default function Page() {
         setImages(dict)
     }
 
-
-
+    /* ================= MY UPLOADS ================= */
 
     const saveCaption = (userId: string, imageUrl: string, captionId: string, captionText: string) => {
         const key = `saved_${userId}`
@@ -122,7 +149,7 @@ export default function Page() {
         saveCaption(user.id, uploadedImageUrl, current.id, current.caption || current.content)
     }
 
-
+    /* ================= UPLOAD FLOW ================= */
 
     const handleFileUpload = async () => {
         if (!user || !selectedFile) return
@@ -238,10 +265,14 @@ export default function Page() {
         }
     }
 
-
+    /* ================= VOTING ================= */
 
     const submitVote = async (vote_value: number, caption_id: string) => {
         if (!user) return
+
+        // Double-check in case state is stale
+        if (votedIds.has(caption_id)) return
+
         await supabase.from('caption_votes').insert([{
             created_datetime_utc: new Date().toISOString(),
             modified_datetime_utc: new Date().toISOString(),
@@ -249,6 +280,14 @@ export default function Page() {
             caption_id,
             vote_value
         }])
+
+        // Persist to localStorage immediately
+        const localKey = `voted_${user.id}`
+        const existing: string[] = JSON.parse(localStorage.getItem(localKey) ?? '[]')
+        if (!existing.includes(caption_id)) {
+            existing.push(caption_id)
+            localStorage.setItem(localKey, JSON.stringify(existing))
+        }
     }
 
     const validCaptions = useMemo(
@@ -262,19 +301,23 @@ export default function Page() {
     )
 
     const handleVote = (value: number, id: string) => {
+        if (votedIds.has(id)) return // Guard against double vote
         submitVote(value, id)
         setVotes(prev => ({ ...prev, [id]: (prev[id] ?? 0) + value }))
-        setVotedIds(prev => new Set([...prev, id]))
+        setVotedIds(prev => {
+            const next = new Set([...prev, id])
+            return next
+        })
     }
 
-
+    /* ================= RENDER ================= */
 
     if (!user) {
         return (
             <div className={styles.appBackground}>
                 <div className={styles.centeredContainer}>
                     <div className={styles.centeredInner}>
-                        <h2 className={styles.pageTitle}>The Humor Project</h2>
+                        <h2 className={styles.pageTitle}>Welcome to caption rating</h2>
                         <button
                             onClick={() =>
                                 supabase.auth.signInWithOAuth({
@@ -305,7 +348,7 @@ export default function Page() {
                 onEmailClick={handleOpenUploads}
             />
 
-
+            {/* ================= MY UPLOADS MODAL ================= */}
             {showUploads && (
                 <div className={styles.modalOverlay} onClick={() => setShowUploads(false)}>
                     <div className={styles.modalBox} onClick={e => e.stopPropagation()}>
@@ -369,7 +412,9 @@ export default function Page() {
                                             {caption.caption || caption.content || caption.text || 'No caption'}
                                         </p>
                                         <div className={styles.ratingFooter}>
-
+                                            <span className={styles.ratingScore}>
+                                                ★ {votes[caption.id] ?? 0}
+                                            </span>
                                             <div className={styles.ratingButtons}>
                                                 <button className={styles.upvoteBtn} onClick={() => handleVote(1, caption.id)}>▲</button>
                                                 <button className={styles.downvoteBtn} onClick={() => handleVote(-1, caption.id)}>▼</button>
@@ -387,7 +432,6 @@ export default function Page() {
 
                     {uploadSuccess && uploadedImageUrl && uploadedCaptions.length > 0 ? (
                         <div className={styles.uploadPreviewSection}>
-
                             <div className={`${styles.ratingCard} ${styles.uploadPreviewCard}`}>
                                 <div className={styles.ratingImageWrapper}>
                                     <img
@@ -413,7 +457,6 @@ export default function Page() {
                                 </div>
                             </div>
 
-                            {/* Carousel controls */}
                             <div className={styles.captionCarouselControls}>
                                 <button
                                     type="button"
@@ -550,7 +593,7 @@ export default function Page() {
     )
 }
 
-
+/* ================= NAVBAR ================= */
 
 function Navbar({ user, onLogout, activeTab, setActiveTab, onEmailClick }: any) {
     const items: ('Rating' | 'Upload')[] = ['Rating', 'Upload']
