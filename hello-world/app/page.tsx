@@ -410,71 +410,92 @@ export default function Page() {
                     <h1 className={styles.pageTitle}>Upload Your Photos to Generate your Captions</h1>
 
                     {/* If we already uploaded successfully, only show image + carousel */}
-                    {uploadSuccess && uploadedImageUrl && uploadedCaptions.length > 0 ? (
-                        <div className={styles.uploadPreviewSection}>
-                            <div className={styles.uploadPreviewImageWrapper}>
-                                <img
-                                    src={uploadedImageUrl}
-                                    alt="Uploaded"
-                                    className={styles.uploadPreviewImage}
-                                />
-                            </div>
+                   {uploadSuccess && uploadedImageUrl && uploadedCaptions.length > 0 ? (
+                       <div className={styles.uploadPreviewSection}>
+                           <div className={styles.uploadPreviewImageWrapper}>
+                               <img
+                                   src={uploadedImageUrl}
+                                   alt="Uploaded"
+                                   className={styles.uploadPreviewImage}
+                               />
+                           </div>
 
-                            <div className={styles.captionCarousel}>
-                                <button
-                                    type="button"
-                                    className={`${styles.carouselNavButton} ${styles.navLogout}`}
-                                    onClick={() =>
-                                        setUploadedCaptionIndex((prev) =>
-                                            prev === 0
-                                                ? uploadedCaptions.length - 1
-                                                : prev - 1
-                                        )
-                                    }
-                                >
-                                    ◀
-                                </button>
+                           <div className={styles.captionCarousel}>
+                               <button
+                                   type="button"
+                                   className={`${styles.carouselNavButton} ${styles.navLogout}`}
+                                   onClick={() =>
+                                       setUploadedCaptionIndex((prev) =>
+                                           prev === 0
+                                               ? uploadedCaptions.length - 1
+                                               : prev - 1
+                                       )
+                                   }
+                               >
+                                   ◀
+                               </button>
 
-                                <div className={styles.captionCarouselContent}>
-                                    <h3 className={styles.carouselCaptionTitle}>
-                                        {uploadedCaptions[uploadedCaptionIndex].caption}
-                                    </h3>
-                                    <p className={styles.carouselCaptionBody}>
-                                        {uploadedCaptions[uploadedCaptionIndex].content}
-                                    </p>
+                               <div className={styles.captionCarouselContent}>
+                                   <h3 className={styles.carouselCaptionTitle}>
+                                       {uploadedCaptions[uploadedCaptionIndex].caption}
+                                   </h3>
+                                   <p className={styles.carouselCaptionBody}>
+                                       {uploadedCaptions[uploadedCaptionIndex].content}
+                                   </p>
 
-                                    <div className={styles.carouselDots}>
-                                        {uploadedCaptions.map((c, idx) => (
-                                            <button
-                                                key={c.id}
-                                                type="button"
-                                                onClick={() => setUploadedCaptionIndex(idx)}
-                                                className={`${styles.carouselDot} ${
-                                                    idx === uploadedCaptionIndex
-                                                        ? styles.carouselDotActive
-                                                        : ''
-                                                }`}
-                                            />
-                                        ))}
-                                    </div>
-                                </div>
+                                   <div className={styles.carouselDots}>
+                                       {uploadedCaptions.map((c, idx) => (
+                                           <button
+                                               key={c.id}
+                                               type="button"
+                                               onClick={() => setUploadedCaptionIndex(idx)}
+                                               className={`${styles.carouselDot} ${
+                                                   idx === uploadedCaptionIndex
+                                                       ? styles.carouselDotActive
+                                                       : ''
+                                               }`}
+                                           />
+                                       ))}
+                                   </div>
+                               </div>
 
-                                <button
-                                    type="button"
-                                    className={`${styles.carouselNavButton} ${styles.navLogout}`}
-                                    onClick={() =>
-                                        setUploadedCaptionIndex((prev) =>
-                                            prev === uploadedCaptions.length - 1
-                                                ? 0
-                                                : prev + 1
-                                        )
-                                    }
-                                >
-                                    ▶
-                                </button>
-                            </div>
-                        </div>
-                    ) : (
+                               <button
+                                   type="button"
+                                   className={`${styles.carouselNavButton} ${styles.navLogout}`}
+                                   onClick={() =>
+                                       setUploadedCaptionIndex((prev) =>
+                                           prev === uploadedCaptions.length - 1
+                                               ? 0
+                                               : prev + 1
+                                       )
+                                   }
+                               >
+                                   ▶
+                               </button>
+                           </div>
+
+                           {/* ========== NEW: Upload Another Photo button ========== */}
+                           <div style={{ marginTop: 24 }}>
+                               <button
+                                   type="button"
+                                   onClick={() => {
+                                       setSelectedFile(null)
+                                       setUploadProgress(0)
+                                       setUploadSuccess(false)
+                                       setUploadedImageUrl(null)
+                                       setUploadedCaptions([])
+                                       setUploadedCaptionIndex(0)
+                                       setUploadedFileName(null)
+                                   }}
+                                   className={styles.navLogout}
+                               >
+                                   Upload Another Photo
+                               </button>
+                           </div>
+                       </div>
+                   ) : (
+                       // ... rest of the upload form stays the same
+
                         <>
                             {/* Step 1: select file + preview + submit button */}
                             <div
