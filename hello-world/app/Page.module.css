@@ -493,3 +493,96 @@ body {
     opacity: 0.4;
     cursor: not-allowed;
 }
+/* Image + carousel layout */
+
+.uploadPreviewSection {
+  margin-top: 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.uploadPreviewImageWrapper {
+  max-width: 420px;
+  width: 100%;
+}
+
+.uploadPreviewImage {
+  width: 100%;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+/* Caption carousel */
+
+.captionCarousel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 640px;
+  width: 100%;
+}
+
+.captionCarouselContent {
+  flex: 1;
+  text-align: center;
+}
+
+.carouselNavButton {
+  border: none;
+  background: transparent;
+  padding: 0 8px;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+/* If you want them to be exactly like navLogout, optionally add: */
+/*
+.carouselNavButton.navLogout {
+  padding: 8px 16px;
+  border-radius: 999px;
+}
+*/
+
+/* Caption carousel text */
+/* Caption carousel text */
+
+.carouselCaptionTitle {
+  margin: 0 0 8px;
+  font-size: 1.7rem;              /* larger title */
+  color: #ff5ac8;
+  text-shadow: 0 0 3px #ff5ac8,
+               0 0 8px #ff5ac8,
+               0 0 18px #ff5ac8;
+}
+
+.carouselCaptionBody {
+  margin: 0 0 12px;
+  font-size: 1.5rem;
+  color: white;
+  text-shadow: 0 0 2px #ff5ac8,
+               0 0 6px #ff5ac8;
+}
+
+/* Caption carousel dots */
+
+.carouselDots {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+}
+
+.carouselDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: none;
+  background: #944e7b;
+  cursor: pointer;
+}
+
+.carouselDotActive {
+  background: #ff5ac8;
+  box-shadow: 0 0 6px #ff5ac8;
+}

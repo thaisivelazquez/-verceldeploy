@@ -19,6 +19,13 @@ export default function Page() {
     const [uploading, setUploading] = useState(false)
     const [uploadSuccess, setUploadSuccess] = useState(false)
 
+    // NEW: local state for uploaded image + its captions
+    const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
+    const [uploadedCaptions, setUploadedCaptions] = useState<
+        { id: string; caption: string; content: string }[]
+    >([])
+    const [uploadedCaptionIndex, setUploadedCaptionIndex] = useState(0)
+
     const ITEMS_PER_PAGE = 20
 
     /* ================= AUTH ================= */
@@ -39,7 +46,7 @@ export default function Page() {
         return () => subscription.unsubscribe()
     }, [])
 
-    /* ================= DATA ================= */
+    /* ================= DATA (RATING MODE) ================= */
 
     useEffect(() => {
         if (activeTab === 'Rating') loadRatingData()
@@ -69,76 +76,6 @@ export default function Page() {
         return data ?? []
     }
 
-    const handleFileUpload = async (file: File) => {
-        if (!user) return
-
-        try {
-            setUploading(true)
-            setUploadProgress(0)
-            setUploadSuccess(false)
-
-            const fileExt = file.name.split('.').pop()
-            const fileName = `${user.id}_${Date.now()}.${fileExt}`
-
-            const { error } = await supabase.storage
-                .from('images')
-                .upload(fileName, file, {
-                    cacheControl: '3600',
-                    upsert: false,
-                })
-
-            if (error) throw error
-
-            const { data } = supabase.storage
-                .from('images')
-                .getPublicUrl(fileName)
-
-            await supabase.from('images').insert([
-                {
-                    id: typeof crypto !== 'undefined' && 'randomUUID' in crypto
-                        ? crypto.randomUUID()
-                        : `${user.id}_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-                    url: data.publicUrl,
-                    created_datetime_utc: new Date().toISOString(),
-                    modified_datetime_utc: new Date().toISOString(),
-                    profile_id: user.id,
-                }
-            ])
-
-            setUploadedFileName(fileName)
-            setUploadProgress(100)
-            setUploadSuccess(true)
-        } catch (err) {
-            console.error(err)
-            alert('Upload failed')
-        } finally {
-            setUploading(false)
-        }
-    }
-
-    const deleteUploadedImage = async () => {
-        if (!uploadedFileName) {
-            setSelectedFile(null)
-            setUploadProgress(0)
-            setUploadSuccess(false)
-            return
-        }
-
-        try {
-            // delete from storage
-            await supabase.storage.from('images').remove([uploadedFileName])
-            // you could also delete from the images table here if needed
-
-            setSelectedFile(null)
-            setUploadedFileName(null)
-            setUploadProgress(0)
-            setUploadSuccess(false)
-        } catch (err) {
-            console.error(err)
-            alert('Failed to delete image')
-        }
-    }
-
     const fetchImages = async (imageIds: string[]) => {
         if (!imageIds.length) return
 
@@ -152,6 +89,174 @@ export default function Page() {
 
         setImages(dict)
     }
+
+    /* ================= UPLOAD FLOW (UPLOAD MODE) ================= */
+
+    // Now only called when user hits "Submit" in Upload mode
+    const handleFileUpload = async () => {
+        if (!user || !selectedFile) return
+
+        const file = selectedFile
+
+        try {
+            setUploading(true)
+            setUploadProgress(10)
+            setUploadSuccess(false)
+            setUploadedCaptions([])
+            setUploadedCaptionIndex(0)
+            setUploadedImageUrl(null)
+
+            // 1️⃣ Get JWT token
+            const { data: { session } } = await supabase.auth.getSession()
+            const token = session?.access_token
+            if (!token) throw new Error('No auth token')
+
+            // 2️⃣ Generate presigned URL
+            const presignRes = await fetch(
+                'https://api.almostcrackd.ai/pipeline/generate-presigned-url',
+                {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        contentType: file.type
+                    })
+                }
+            )
+
+            if (!presignRes.ok) throw new Error('Failed to generate presigned URL')
+
+            const { presignedUrl, cdnUrl } = await presignRes.json()
+
+            setUploadProgress(30)
+
+            // 3️⃣ Upload image to S3
+            const uploadRes = await fetch(presignedUrl, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': file.type
+                },
+                body: file
+            })
+
+            if (!uploadRes.ok) throw new Error('Failed to upload to S3')
+
+            setUploadProgress(60)
+
+            // 4️⃣ Register image with pipeline
+            const registerRes = await fetch(
+                'https://api.almostcrackd.ai/pipeline/upload-image-from-url',
+                {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        imageUrl: cdnUrl,
+                        isCommonUse: false
+                    })
+                }
+            )
+
+            if (!registerRes.ok) throw new Error('Failed to register image')
+
+            const { imageId } = await registerRes.json()
+
+            setUploadProgress(80)
+
+            // 5️⃣ Generate captions
+            const captionRes = await fetch(
+                'https://api.almostcrackd.ai/pipeline/generate-captions',
+                {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        imageId
+                    })
+                }
+            )
+
+            if (!captionRes.ok) throw new Error('Failed to generate captions')
+
+            const generatedCaptions = await captionRes.json()
+
+            console.log('Generated captions response:')
+            console.log(generatedCaptions)
+            console.log('Is array:', Array.isArray(generatedCaptions))
+
+            setUploadProgress(100)
+
+            // 6️⃣ Save captions to Supabase
+            if (Array.isArray(generatedCaptions)) {
+                const rows = generatedCaptions.map((c: any) => ({
+                    id: c.id,
+                    caption: c.caption,
+                    content: c.content,
+                    image_id: imageId,
+                    created_datetime_utc: new Date().toISOString(),
+                    modified_datetime_utc: new Date().toISOString()
+                }))
+
+                await supabase.from('captions').insert(rows)
+
+                // store locally for carousel
+                setUploadedCaptions(
+                    generatedCaptions.map((c: any) => ({
+                        id: c.id,
+                        caption: c.caption,
+                        content: c.content
+                    }))
+                )
+                setUploadedCaptionIndex(0)
+            }
+
+            // store uploaded image URL locally (center image)
+            setUploadedImageUrl(cdnUrl)
+
+            setUploadSuccess(true)
+
+        } catch (err) {
+            console.error(err)
+            alert('Upload & caption generation failed')
+        } finally {
+            setUploading(false)
+        }
+    }
+
+    const deleteUploadedImage = async () => {
+        if (!uploadedFileName) {
+            setSelectedFile(null)
+            setUploadProgress(0)
+            setUploadSuccess(false)
+            setUploadedImageUrl(null)
+            setUploadedCaptions([])
+            setUploadedCaptionIndex(0)
+            return
+        }
+
+        try {
+            await supabase.storage.from('images').remove([uploadedFileName])
+
+            setSelectedFile(null)
+            setUploadedFileName(null)
+            setUploadProgress(0)
+            setUploadSuccess(false)
+            setUploadedImageUrl(null)
+            setUploadedCaptions([])
+            setUploadedCaptionIndex(0)
+        } catch (err) {
+            console.error(err)
+            alert('Failed to delete image')
+        }
+    }
+
+    /* ================= VOTING (RATING MODE) ================= */
 
     const submitVote = async (vote_value: number, caption_id: string) => {
         if (!user) return
@@ -174,6 +279,8 @@ export default function Page() {
         submitVote(value, id)
         setCurrentIndex(i => i + 1)
     }
+
+    /* ================= RENDER ================= */
 
     if (!user) {
         return (
@@ -213,6 +320,7 @@ export default function Page() {
             />
 
             {activeTab === 'Rating' ? (
+                /* ================= RATING MODE ================= */
                 <div className={styles.pageWrapperCentered}>
                     <h1 className={styles.pageTitle}>Rate Captions</h1>
 
@@ -297,92 +405,174 @@ export default function Page() {
                     )}
                 </div>
             ) : (
+                /* ================= UPLOAD MODE ================= */
                 <div className={styles.pageWrapperCentered}>
-                    <h1 className={styles.pageTitle}>Upload Your Photos to Generation your Captions</h1>
+                    <h1 className={styles.pageTitle}>Upload Your Photos to Generate your Captions</h1>
 
-                    <div
-                        className={styles.uploadCard}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => {
-                            e.preventDefault()
-                            const file = e.dataTransfer.files?.[0]
-                            if (file) {
-                                setSelectedFile(file)
-                                handleFileUpload(file)
-                            }
-                        }}
-                    >
-                        <div className={styles.uploadDropzone}>
-                            <div/>
+                    {/* If we already uploaded successfully, only show image + carousel */}
+                    {uploadSuccess && uploadedImageUrl && uploadedCaptions.length > 0 ? (
+                        <div className={styles.uploadPreviewSection}>
+                            <div className={styles.uploadPreviewImageWrapper}>
+                                <img
+                                    src={uploadedImageUrl}
+                                    alt="Uploaded"
+                                    className={styles.uploadPreviewImage}
+                                />
+                            </div>
 
-                            <p className={styles.uploadTitle}>
-                                Drop your image here, or <span className={styles.uploadBrowse}>browse</span>
-                            </p>
-                            <p className={styles.uploadSubtext}>
-                                Supports: JPEG, JPG, PNG, WEBP, GIF and HEIC
-                            </p>
+                            <div className={styles.captionCarousel}>
+                                <button
+                                    type="button"
+                                    className={`${styles.carouselNavButton} ${styles.navLogout}`}
+                                    onClick={() =>
+                                        setUploadedCaptionIndex((prev) =>
+                                            prev === 0
+                                                ? uploadedCaptions.length - 1
+                                                : prev - 1
+                                        )
+                                    }
+                                >
+                                    ◀
+                                </button>
 
-                            <input
-                                type="file"
-                                accept="image/png,image/jpeg,image/webp"
-                                className={styles.uploadInput}
-                                onChange={(e) => {
-                                    const file = e.target.files?.[0]
+                                <div className={styles.captionCarouselContent}>
+                                    <h3 className={styles.carouselCaptionTitle}>
+                                        {uploadedCaptions[uploadedCaptionIndex].caption}
+                                    </h3>
+                                    <p className={styles.carouselCaptionBody}>
+                                        {uploadedCaptions[uploadedCaptionIndex].content}
+                                    </p>
+
+                                    <div className={styles.carouselDots}>
+                                        {uploadedCaptions.map((c, idx) => (
+                                            <button
+                                                key={c.id}
+                                                type="button"
+                                                onClick={() => setUploadedCaptionIndex(idx)}
+                                                className={`${styles.carouselDot} ${
+                                                    idx === uploadedCaptionIndex
+                                                        ? styles.carouselDotActive
+                                                        : ''
+                                                }`}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    className={`${styles.carouselNavButton} ${styles.navLogout}`}
+                                    onClick={() =>
+                                        setUploadedCaptionIndex((prev) =>
+                                            prev === uploadedCaptions.length - 1
+                                                ? 0
+                                                : prev + 1
+                                        )
+                                    }
+                                >
+                                    ▶
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Step 1: select file + preview + submit button */}
+                            <div
+                                className={styles.uploadCard}
+                                onDragOver={(e) => e.preventDefault()}
+                                onDrop={(e) => {
+                                    e.preventDefault()
+                                    const file = e.dataTransfer.files?.[0]
                                     if (file) {
                                         setSelectedFile(file)
-                                        handleFileUpload(file)
+                                        setUploadProgress(0)
+                                        setUploadSuccess(false)
+                                        setUploadedImageUrl(null)
+                                        setUploadedCaptions([])
+                                        setUploadedCaptionIndex(0)
                                     }
                                 }}
-                            />
-                        </div>
+                            >
+                                <div className={styles.uploadDropzone}>
+                                    <div/>
 
-                        {selectedFile && (
-                            <>
-                                <div className={styles.fileRow}>
-                                    <div className={styles.fileLeft}>
-                                        <div className={styles.fileAvatar}>
-                                            {selectedFile.name.charAt(0).toUpperCase()}
-                                        </div>
-                                        <div className={styles.fileMeta}>
-                                            <div className={styles.fileName}>
-                                                {selectedFile.name}{' '}
-                                                <span className={styles.fileAttached}>· attached</span>
-                                            </div>
-                                            <div className={styles.fileSize}>
-                                                {(selectedFile.size / (1024 * 1024)).toFixed(1)} MB
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <p className={styles.uploadTitle}>
+                                        Drop your image here, or <span className={styles.uploadBrowse}>browse</span>
+                                    </p>
+                                    <p className={styles.uploadSubtext}>
+                                        Supports: JPEG, JPG, PNG, WEBP, GIF and HEIC
+                                    </p>
 
-                                    <div className={styles.fileRight}>
-                                        {uploadSuccess && (
-                                            <span className={styles.fileStatusIcon}>✔</span>
-                                        )}
-                                        <button
-                                            className={styles.deleteIconButton}
-                                            type="button"
-                                            onClick={deleteUploadedImage}
-                                            disabled={uploading}
-                                        >
-                                            ✕
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div className={styles.progressBarOuter}>
-                                    <div
-                                        className={styles.progressBarInner}
-                                        style={{ width: `${uploadProgress}%` }}
+                                    <input
+                                        type="file"
+                                        accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,image/heic"
+                                        className={styles.uploadInput}
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0]
+                                            if (file) {
+                                                setSelectedFile(file)
+                                                setUploadProgress(0)
+                                                setUploadSuccess(false)
+                                                setUploadedImageUrl(null)
+                                                setUploadedCaptions([])
+                                                setUploadedCaptionIndex(0)
+                                            }
+                                        }}
                                     />
                                 </div>
-                            </>
-                        )}
-                    </div>
 
-                    {uploadSuccess && (
-                        <p style={{ marginTop: 16, color: 'rgb(0, 180, 80)' }}>
-                            ✔ Image uploaded successfully
-                        </p>
+                                {selectedFile && (
+                                    <>
+                                        <div className={styles.fileRow}>
+                                            <div className={styles.fileLeft}>
+                                                <div className={styles.fileAvatar}>
+                                                    {selectedFile.name.charAt(0).toUpperCase()}
+                                                </div>
+                                                <div className={styles.fileMeta}>
+                                                    <div className={styles.fileName}>
+                                                        {selectedFile.name}{' '}
+                                                        <span className={styles.fileAttached}>· attached</span>
+                                                    </div>
+                                                    <div className={styles.fileSize}>
+                                                        {(selectedFile.size / (1024 * 1024)).toFixed(1)} MB
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className={styles.fileRight}>
+                                                <button
+                                                    className={styles.deleteIconButton}
+                                                    type="button"
+                                                    onClick={deleteUploadedImage}
+                                                    disabled={uploading}
+                                                >
+                                                    ✕
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div className={styles.progressBarOuter}>
+                                            <div
+                                                className={styles.progressBarInner}
+                                                style={{ width: `${uploadProgress}%` }}
+                                            />
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Submit button to actually upload + generate captions */}
+                            <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center' }}>
+                                <button
+                                    type="button"
+                                    onClick={handleFileUpload}
+                                    className={styles.navLogout}
+                                    disabled={!selectedFile || uploading}
+                                >
+                                    {uploading ? 'Uploading...' : 'Submit & Generate Captions'}
+                                </button>
+                            </div>
+                        </>
                     )}
                 </div>
             )}
@@ -393,7 +583,7 @@ export default function Page() {
 /* ================= NAVBAR ================= */
 
 function Navbar({ user, onLogout, activeTab, setActiveTab }: any) {
-    const items = ['Rating', 'Upload']
+    const items: ('Rating' | 'Upload')[] = ['Rating', 'Upload']
 
     return (
         <div className={styles.navbar}>
