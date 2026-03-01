@@ -188,7 +188,6 @@ body {
     border-color: rgba(236, 72, 153, 0.4);
 }
 
-/* Upload preview uses same card but fixed width */
 .uploadPreviewCard {
     width: 360px;
     cursor: default;
@@ -199,6 +198,7 @@ body {
     box-shadow: 0 0 20px rgba(236, 72, 153, 0.25), 0 0 40px rgba(236, 72, 153, 0.1);
 }
 
+/* Voting grid — square crop */
 .ratingImageWrapper {
     width: 100%;
     aspect-ratio: 1;
@@ -220,6 +220,20 @@ body {
 
 .uploadPreviewCard:hover .ratingImage {
     transform: none;
+}
+
+/* Upload preview card — full image no crop */
+.uploadPreviewCard .ratingImageWrapper {
+    aspect-ratio: unset;
+    height: 340px;
+    background: #111;
+}
+
+.uploadPreviewCard .ratingImage {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
 }
 
 .ratingCardBody {
@@ -447,9 +461,11 @@ body {
     border-color: rgba(236, 72, 153, 0.7);
 }
 
+/* Modal saved cards — full image no crop */
 .modalImageWrapper {
     width: 100%;
-    aspect-ratio: 1;
+    aspect-ratio: unset;
+    height: 220px;
     overflow: hidden;
     background: #111;
 }
@@ -457,7 +473,7 @@ body {
 .modalImage {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
     display: block;
     transition: transform 0.3s ease;
 }
@@ -549,7 +565,6 @@ body {
     box-shadow: 0 0 12px rgba(236, 72, 153, 0.6);
 }
 
-/* Pink dot = already saved */
 .carouselDotSaved {
     background: rgba(236, 72, 153, 0.5);
     box-shadow: 0 0 6px rgba(236, 72, 153, 0.3);
