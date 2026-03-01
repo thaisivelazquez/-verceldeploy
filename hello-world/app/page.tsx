@@ -58,12 +58,10 @@ export default function Page() {
         const loadVotedIds = async () => {
             const localKey = `voted_${user.id}`
             const localVoted: string[] = JSON.parse(localStorage.getItem(localKey) ?? '[]')
-
             const { data } = await supabase
                 .from('caption_votes')
                 .select('caption_id')
                 .eq('profile_id', user.id)
-
             const dbVoted = data?.map((r: any) => r.caption_id) ?? []
             const merged = new Set([...localVoted, ...dbVoted])
             setVotedIds(merged)
@@ -78,29 +76,31 @@ export default function Page() {
         if (activeTab === 'Rating' && user) loadRatingData()
     }, [activeTab, page, user])
 
-    // Auto-advance page when all captions on current page are already voted
+    // Proactively fetch next page when running low on unvoted captions
     useEffect(() => {
-        if (
-            captions.length > 0 &&
-            votedIds.size > 0 &&
-            captions.every(c => votedIds.has(c.id))
-        ) {
-            setNoMoreCaptions(false)
+        if (!user || captions.length === 0 || noMoreCaptions) return
+        const remaining = captions.filter(c => !votedIds.has(c.id)).length
+        if (remaining <= 5) {
             setPage(p => p + 1)
         }
-    }, [captions, votedIds])
+    }, [votedIds])
 
     const loadRatingData = async () => {
         const captionsData = await fetchCaptions(page)
         if (!captionsData?.length) {
+            if (page > 0) return
             setNoMoreCaptions(true)
             return
         }
         const ids = [...new Set(captionsData.map((c: any) => c.image_id))]
-        await fetchImages(ids)
+        await Promise.all([
+            fetchImages(ids),
+            fetchVoteTotals(captionsData.map((c: any) => c.id))
+        ])
     }
 
     const fetchCaptions = async (currentPage: number) => {
+        if (currentPage === 0) setCaptions([])
         const from = currentPage * ITEMS_PER_PAGE
         const to = from + ITEMS_PER_PAGE - 1
         const { data, error } = await supabase
@@ -111,7 +111,12 @@ export default function Page() {
         if (error) return []
         if (!data?.length) return []
         const shuffled = [...data].sort(() => Math.random() - 0.5)
-        setCaptions(shuffled)
+        // Append new captions, never replace existing ones
+        setCaptions(prev => {
+            const existingIds = new Set(prev.map((c: any) => c.id))
+            const newOnes = shuffled.filter((c: any) => !existingIds.has(c.id))
+            return [...prev, ...newOnes]
+        })
         return shuffled
     }
 
@@ -123,7 +128,21 @@ export default function Page() {
             .in('id', imageIds)
         const dict: Record<string, string> = {}
         data?.forEach(img => { dict[img.id] = img.url })
-        setImages(dict)
+        // Merge new images into existing dict
+        setImages(prev => ({ ...prev, ...dict }))
+    }
+
+    const fetchVoteTotals = async (captionIds: string[]) => {
+        if (!captionIds.length) return
+        const { data } = await supabase
+            .from('caption_votes')
+            .select('caption_id, vote_value')
+            .in('caption_id', captionIds)
+        const totals: Record<string, number> = {}
+        data?.forEach((row: any) => {
+            totals[row.caption_id] = (totals[row.caption_id] ?? 0) + row.vote_value
+        })
+        setVotes(prev => ({ ...prev, ...totals }))
     }
 
     /* ================= MY UPLOADS ================= */
@@ -280,7 +299,6 @@ export default function Page() {
     const submitVote = async (vote_value: number, caption_id: string) => {
         if (!user) return
         if (votedIds.has(caption_id)) return
-
         await supabase.from('caption_votes').insert([{
             created_datetime_utc: new Date().toISOString(),
             modified_datetime_utc: new Date().toISOString(),
@@ -288,7 +306,6 @@ export default function Page() {
             caption_id,
             vote_value
         }])
-
         const localKey = `voted_${user.id}`
         const existing: string[] = JSON.parse(localStorage.getItem(localKey) ?? '[]')
         if (!existing.includes(caption_id)) {
@@ -305,6 +322,12 @@ export default function Page() {
     const displayedCaptions = useMemo(
         () => validCaptions.filter(c => !votedIds.has(c.id)).slice(0, DISPLAY_LIMIT),
         [validCaptions, votedIds]
+    )
+
+    // Show no more screen only when truly exhausted
+    const isExhausted = useMemo(
+        () => noMoreCaptions && displayedCaptions.length === 0,
+        [noMoreCaptions, displayedCaptions]
     )
 
     const handleVote = (value: number, id: string) => {
@@ -360,7 +383,6 @@ export default function Page() {
                             <h2 className={styles.modalTitle}>My Saved Captions</h2>
                             <button className={styles.modalClose} onClick={() => setShowUploads(false)}>✕</button>
                         </div>
-
                         {loadingUploads ? (
                             <p className={styles.modalEmpty}>Loading...</p>
                         ) : myUploadedImages.length === 0 ? (
@@ -387,18 +409,11 @@ export default function Page() {
                 <div className={styles.pageWrapperCentered}>
                     <h1 className={styles.pageTitle}>Rate Captions</h1>
 
-                    {noMoreCaptions || displayedCaptions.length === 0 ? (
-                        <div className={styles.emptyState}>
-                            <p className={styles.emptyText}>You've rated everything!</p>
-                            <button
-                                className={styles.button}
-                                onClick={() => {
-                                    setNoMoreCaptions(false)
-                                    setPage(0)
-                                }}
-                            >
-                                Start Over
-                            </button>
+                    {isExhausted ? (
+                        <div className={styles.noMoreState}>
+                            <p className={styles.noMoreEmoji}>🎉</p>
+                            <h2 className={styles.noMoreTitle}>No New Memes</h2>
+                            <p className={styles.noMoreSub}>You've rated everything. Check back later!</p>
                         </div>
                     ) : (
                         <div className={styles.ratingGrid}>
