@@ -537,16 +537,7 @@ body {
   cursor: pointer;
 }
 
-/* If you want them to be exactly like navLogout, optionally add: */
-/*
-.carouselNavButton.navLogout {
-  padding: 8px 16px;
-  border-radius: 999px;
-}
-*/
 
-/* Caption carousel text */
-/* Caption carousel text */
 
 .carouselCaptionTitle {
   margin: 0 0 8px;
