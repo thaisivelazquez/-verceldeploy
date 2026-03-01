@@ -12,6 +12,7 @@ export default function Page() {
     const [page, setPage] = useState(0)
     const [votedIds, setVotedIds] = useState<Set<string>>(new Set())
     const [votes, setVotes] = useState<Record<string, number>>({})
+    const [noMoreCaptions, setNoMoreCaptions] = useState(false)
 
     const [uploadProgress, setUploadProgress] = useState(0)
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -52,27 +53,20 @@ export default function Page() {
 
     /* ================= LOAD PERSISTED VOTES ================= */
 
-    // On user login, load voted IDs from both localStorage AND Supabase
     useEffect(() => {
         if (!user) return
         const loadVotedIds = async () => {
-            // 1. Load from localStorage first (fast)
             const localKey = `voted_${user.id}`
             const localVoted: string[] = JSON.parse(localStorage.getItem(localKey) ?? '[]')
 
-            // 2. Also fetch from Supabase (authoritative, catches other devices)
             const { data } = await supabase
                 .from('caption_votes')
                 .select('caption_id')
                 .eq('profile_id', user.id)
 
             const dbVoted = data?.map((r: any) => r.caption_id) ?? []
-
-            // Merge both sources
             const merged = new Set([...localVoted, ...dbVoted])
             setVotedIds(merged)
-
-            // Sync merged back to localStorage
             localStorage.setItem(localKey, JSON.stringify([...merged]))
         }
         loadVotedIds()
@@ -81,15 +75,29 @@ export default function Page() {
     /* ================= DATA ================= */
 
     useEffect(() => {
-        if (activeTab === 'Rating') loadRatingData()
-    }, [activeTab, page])
+        if (activeTab === 'Rating' && user) loadRatingData()
+    }, [activeTab, page, user])
+
+    // Auto-advance page when all captions on current page are already voted
+    useEffect(() => {
+        if (
+            captions.length > 0 &&
+            votedIds.size > 0 &&
+            captions.every(c => votedIds.has(c.id))
+        ) {
+            setNoMoreCaptions(false)
+            setPage(p => p + 1)
+        }
+    }, [captions, votedIds])
 
     const loadRatingData = async () => {
         const captionsData = await fetchCaptions(page)
-        if (captionsData?.length) {
-            const ids = [...new Set(captionsData.map((c: any) => c.image_id))]
-            await fetchImages(ids)
+        if (!captionsData?.length) {
+            setNoMoreCaptions(true)
+            return
         }
+        const ids = [...new Set(captionsData.map((c: any) => c.image_id))]
+        await fetchImages(ids)
     }
 
     const fetchCaptions = async (currentPage: number) => {
@@ -101,8 +109,10 @@ export default function Page() {
             .range(from, to)
             .order('id', { ascending: true })
         if (error) return []
-        setCaptions(data ?? [])
-        return data ?? []
+        if (!data?.length) return []
+        const shuffled = [...data].sort(() => Math.random() - 0.5)
+        setCaptions(shuffled)
+        return shuffled
     }
 
     const fetchImages = async (imageIds: string[]) => {
@@ -269,8 +279,6 @@ export default function Page() {
 
     const submitVote = async (vote_value: number, caption_id: string) => {
         if (!user) return
-
-        // Double-check in case state is stale
         if (votedIds.has(caption_id)) return
 
         await supabase.from('caption_votes').insert([{
@@ -281,7 +289,6 @@ export default function Page() {
             vote_value
         }])
 
-        // Persist to localStorage immediately
         const localKey = `voted_${user.id}`
         const existing: string[] = JSON.parse(localStorage.getItem(localKey) ?? '[]')
         if (!existing.includes(caption_id)) {
@@ -301,13 +308,10 @@ export default function Page() {
     )
 
     const handleVote = (value: number, id: string) => {
-        if (votedIds.has(id)) return // Guard against double vote
+        if (votedIds.has(id)) return
         submitVote(value, id)
         setVotes(prev => ({ ...prev, [id]: (prev[id] ?? 0) + value }))
-        setVotedIds(prev => {
-            const next = new Set([...prev, id])
-            return next
-        })
+        setVotedIds(prev => new Set([...prev, id]))
     }
 
     /* ================= RENDER ================= */
@@ -383,17 +387,17 @@ export default function Page() {
                 <div className={styles.pageWrapperCentered}>
                     <h1 className={styles.pageTitle}>Rate Captions</h1>
 
-                    {displayedCaptions.length === 0 ? (
+                    {noMoreCaptions || displayedCaptions.length === 0 ? (
                         <div className={styles.emptyState}>
                             <p className={styles.emptyText}>You've rated everything!</p>
                             <button
                                 className={styles.button}
                                 onClick={() => {
-                                    setVotedIds(new Set())
-                                    setPage(p => p + 1)
+                                    setNoMoreCaptions(false)
+                                    setPage(0)
                                 }}
                             >
-                                Load More
+                                Start Over
                             </button>
                         </div>
                     ) : (
@@ -412,7 +416,9 @@ export default function Page() {
                                             {caption.caption || caption.content || caption.text || 'No caption'}
                                         </p>
                                         <div className={styles.ratingFooter}>
-
+                                            <span className={styles.ratingScore}>
+                                                ★ {votes[caption.id] ?? 0}
+                                            </span>
                                             <div className={styles.ratingButtons}>
                                                 <button className={styles.upvoteBtn} onClick={() => handleVote(1, caption.id)}>▲</button>
                                                 <button className={styles.downvoteBtn} onClick={() => handleVote(-1, caption.id)}>▼</button>
