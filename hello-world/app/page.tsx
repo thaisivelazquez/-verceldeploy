@@ -370,9 +370,7 @@ export default function Page() {
                                             {caption.caption || caption.content || caption.text || 'No caption'}
                                         </p>
                                         <div className={styles.ratingFooter}>
-                                            <span className={styles.ratingScore}>
-                                                ★ {votes[caption.id] ?? 0}
-                                            </span>
+
                                             <div className={styles.ratingButtons}>
                                                 <button className={styles.upvoteBtn} onClick={() => handleVote(1, caption.id)}>▲</button>
                                                 <button className={styles.downvoteBtn} onClick={() => handleVote(-1, caption.id)}>▼</button>
