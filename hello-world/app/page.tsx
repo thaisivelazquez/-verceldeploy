@@ -24,6 +24,13 @@ export default function Page() {
         { id: string; caption: string; content: string }[]
     >([])
     const [uploadedCaptionIndex, setUploadedCaptionIndex] = useState(0)
+    const [savedCaptionIds, setSavedCaptionIds] = useState<Set<string>>(new Set())
+
+    const [showUploads, setShowUploads] = useState(false)
+    const [myUploadedImages, setMyUploadedImages] = useState<
+        { entryId: string; imageUrl: string; caption: string; saved: boolean }[]
+    >([])
+    const [loadingUploads, setLoadingUploads] = useState(false)
 
     const ITEMS_PER_PAGE = 20
     const DISPLAY_LIMIT = 10
@@ -81,6 +88,41 @@ export default function Page() {
         setImages(dict)
     }
 
+    /* ================= MY UPLOADS ================= */
+
+    // Each saved entry is: { entryId, imageUrl, caption, saved }
+    // entryId = captionId so each caption+image is its own card
+    const saveCaption = (userId: string, imageUrl: string, captionId: string, captionText: string) => {
+        const key = `saved_${userId}`
+        const existing: any[] = JSON.parse(localStorage.getItem(key) ?? '[]')
+        if (!existing.find((e: any) => e.entryId === captionId)) {
+            existing.unshift({ entryId: captionId, imageUrl, caption: captionText, saved: true })
+            localStorage.setItem(key, JSON.stringify(existing))
+        }
+        setSavedCaptionIds(prev => new Set([...prev, captionId]))
+    }
+
+    const loadMyUploads = () => {
+        if (!user) return
+        setLoadingUploads(true)
+        const key = `saved_${user.id}`
+        const stored: { entryId: string; imageUrl: string; caption: string; saved: boolean }[] =
+            JSON.parse(localStorage.getItem(key) ?? '[]')
+        setMyUploadedImages(stored)
+        setLoadingUploads(false)
+    }
+
+    const handleOpenUploads = () => {
+        setShowUploads(true)
+        loadMyUploads()
+    }
+
+    const handleSaveCaption = () => {
+        if (!user || !uploadedImageUrl || uploadedCaptions.length === 0) return
+        const current = uploadedCaptions[uploadedCaptionIndex]
+        saveCaption(user.id, uploadedImageUrl, current.id, current.caption || current.content)
+    }
+
     /* ================= UPLOAD FLOW ================= */
 
     const handleFileUpload = async () => {
@@ -93,6 +135,7 @@ export default function Page() {
             setUploadedCaptions([])
             setUploadedCaptionIndex(0)
             setUploadedImageUrl(null)
+            setSavedCaptionIds(new Set())
 
             const { data: { session } } = await supabase.auth.getSession()
             const token = session?.access_token
@@ -152,12 +195,14 @@ export default function Page() {
                     modified_datetime_utc: new Date().toISOString()
                 }))
                 await supabase.from('captions').insert(rows)
-                setUploadedCaptions(generatedCaptions.map((c: any) => ({
+                const mapped = generatedCaptions.map((c: any) => ({
                     id: c.id, caption: c.caption, content: c.content
-                })))
+                }))
+                setUploadedCaptions(mapped)
                 setUploadedCaptionIndex(0)
+                setUploadedImageUrl(cdnUrl)
             }
-            setUploadedImageUrl(cdnUrl)
+
             setUploadSuccess(true)
         } catch (err) {
             console.error(err)
@@ -175,6 +220,7 @@ export default function Page() {
             setUploadedImageUrl(null)
             setUploadedCaptions([])
             setUploadedCaptionIndex(0)
+            setSavedCaptionIds(new Set())
             return
         }
         try {
@@ -186,6 +232,7 @@ export default function Page() {
             setUploadedImageUrl(null)
             setUploadedCaptions([])
             setUploadedCaptionIndex(0)
+            setSavedCaptionIds(new Set())
         } catch (err) {
             console.error(err)
             alert('Failed to delete image')
@@ -246,6 +293,9 @@ export default function Page() {
         )
     }
 
+    const currentCaption = uploadedCaptions[uploadedCaptionIndex]
+    const currentIsSaved = currentCaption ? savedCaptionIds.has(currentCaption.id) : false
+
     return (
         <div className={styles.appBackground}>
             <Navbar
@@ -253,7 +303,39 @@ export default function Page() {
                 onLogout={async () => { await supabase.auth.signOut(); setUser(null) }}
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
+                onEmailClick={handleOpenUploads}
             />
+
+            {/* ================= MY UPLOADS MODAL ================= */}
+            {showUploads && (
+                <div className={styles.modalOverlay} onClick={() => setShowUploads(false)}>
+                    <div className={styles.modalBox} onClick={e => e.stopPropagation()}>
+                        <div className={styles.modalHeader}>
+                            <h2 className={styles.modalTitle}>My Saved Captions</h2>
+                            <button className={styles.modalClose} onClick={() => setShowUploads(false)}>✕</button>
+                        </div>
+
+                        {loadingUploads ? (
+                            <p className={styles.modalEmpty}>Loading...</p>
+                        ) : myUploadedImages.length === 0 ? (
+                            <p className={styles.modalEmpty}>No saved captions yet. Upload a photo and save a caption!</p>
+                        ) : (
+                            <div className={styles.modalGrid}>
+                                {myUploadedImages.map(({ entryId, imageUrl, caption }) => (
+                                    <div key={entryId} className={styles.modalCard}>
+                                        <div className={styles.modalImageWrapper}>
+                                            <img src={imageUrl} className={styles.modalImage} alt="" />
+                                        </div>
+                                        <div className={styles.modalCardBody}>
+                                            <p className={styles.modalCaptionText}>"{caption}"</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {activeTab === 'Rating' ? (
                 <div className={styles.pageWrapperCentered}>
@@ -292,18 +374,8 @@ export default function Page() {
                                                 ★ {votes[caption.id] ?? 0}
                                             </span>
                                             <div className={styles.ratingButtons}>
-                                                <button
-                                                    className={styles.upvoteBtn}
-                                                    onClick={() => handleVote(1, caption.id)}
-                                                >
-                                                    ▲
-                                                </button>
-                                                <button
-                                                    className={styles.downvoteBtn}
-                                                    onClick={() => handleVote(-1, caption.id)}
-                                                >
-                                                    ▼
-                                                </button>
+                                                <button className={styles.upvoteBtn} onClick={() => handleVote(1, caption.id)}>▲</button>
+                                                <button className={styles.downvoteBtn} onClick={() => handleVote(-1, caption.id)}>▼</button>
                                             </div>
                                         </div>
                                     </div>
@@ -318,33 +390,38 @@ export default function Page() {
 
                     {uploadSuccess && uploadedImageUrl && uploadedCaptions.length > 0 ? (
                         <div className={styles.uploadPreviewSection}>
-                            <div className={styles.uploadPreviewImageWrapper}>
-                                <img
-                                    src={uploadedImageUrl}
-                                    alt="Uploaded"
-                                    className={styles.uploadPreviewImage}
-                                />
-                                <div className={styles.cardOverlayCaption}>
-                                    <div className={styles.captionContent}>
-                                        <h3 className={styles.cardCaptionOverlay}>
-                                            {uploadedCaptions[uploadedCaptionIndex].caption}
-                                        </h3>
-                                        <p className={styles.cardDescriptionOverlay}>
-                                            {uploadedCaptions[uploadedCaptionIndex].content}
-                                        </p>
+                            {/* Card matching rating card format exactly */}
+                            <div className={`${styles.ratingCard} ${styles.uploadPreviewCard}`}>
+                                <div className={styles.ratingImageWrapper}>
+                                    <img
+                                        src={uploadedImageUrl}
+                                        alt="Uploaded"
+                                        className={styles.ratingImage}
+                                    />
+                                </div>
+                                <div className={styles.ratingCardBody}>
+                                    <p className={styles.ratingCaption}>
+                                        "{currentCaption?.caption || currentCaption?.content}"
+                                    </p>
+                                    <div className={styles.ratingFooter}>
+                                        <button
+                                            type="button"
+                                            className={currentIsSaved ? styles.saveButtonSaved : styles.saveButton}
+                                            onClick={handleSaveCaption}
+                                            disabled={currentIsSaved}
+                                        >
+                                            {currentIsSaved ? '✓ Saved' : '♡ Save'}
+                                        </button>
                                     </div>
                                 </div>
                             </div>
 
+                            {/* Carousel controls */}
                             <div className={styles.captionCarouselControls}>
                                 <button
                                     type="button"
                                     className={styles.carouselNavButton}
-                                    onClick={() =>
-                                        setUploadedCaptionIndex((prev) =>
-                                            prev === 0 ? uploadedCaptions.length - 1 : prev - 1
-                                        )
-                                    }
+                                    onClick={() => setUploadedCaptionIndex(prev => prev === 0 ? uploadedCaptions.length - 1 : prev - 1)}
                                 >
                                     ◀ Previous
                                 </button>
@@ -354,40 +431,35 @@ export default function Page() {
                                             key={c.id}
                                             type="button"
                                             onClick={() => setUploadedCaptionIndex(idx)}
-                                            className={`${styles.carouselDot} ${idx === uploadedCaptionIndex ? styles.carouselDotActive : ''}`}
+                                            className={`${styles.carouselDot} ${idx === uploadedCaptionIndex ? styles.carouselDotActive : ''} ${savedCaptionIds.has(c.id) ? styles.carouselDotSaved : ''}`}
                                         />
                                     ))}
                                 </div>
                                 <button
                                     type="button"
                                     className={styles.carouselNavButton}
-                                    onClick={() =>
-                                        setUploadedCaptionIndex((prev) =>
-                                            prev === uploadedCaptions.length - 1 ? 0 : prev + 1
-                                        )
-                                    }
+                                    onClick={() => setUploadedCaptionIndex(prev => prev === uploadedCaptions.length - 1 ? 0 : prev + 1)}
                                 >
                                     Next ▶
                                 </button>
                             </div>
 
-                            <div style={{ marginTop: 24 }}>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setSelectedFile(null)
-                                        setUploadProgress(0)
-                                        setUploadSuccess(false)
-                                        setUploadedImageUrl(null)
-                                        setUploadedCaptions([])
-                                        setUploadedCaptionIndex(0)
-                                        setUploadedFileName(null)
-                                    }}
-                                    className={styles.navLogout}
-                                >
-                                    Upload Another Photo
-                                </button>
-                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSelectedFile(null)
+                                    setUploadProgress(0)
+                                    setUploadSuccess(false)
+                                    setUploadedImageUrl(null)
+                                    setUploadedCaptions([])
+                                    setUploadedCaptionIndex(0)
+                                    setUploadedFileName(null)
+                                    setSavedCaptionIds(new Set())
+                                }}
+                                className={styles.navLogout}
+                            >
+                                Upload Another Photo
+                            </button>
                         </div>
                     ) : (
                         <>
@@ -411,9 +483,7 @@ export default function Page() {
                                     <p className={styles.uploadTitle}>
                                         Drop your image here, or <span className={styles.uploadBrowse}>browse</span>
                                     </p>
-                                    <p className={styles.uploadSubtext}>
-                                        Supports: JPEG, JPG, PNG, WEBP, GIF and HEIC
-                                    </p>
+                                    <p className={styles.uploadSubtext}>Supports: JPEG, JPG, PNG, WEBP, GIF and HEIC</p>
                                     <input
                                         type="file"
                                         accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,image/heic"
@@ -455,16 +525,11 @@ export default function Page() {
                                                     type="button"
                                                     onClick={deleteUploadedImage}
                                                     disabled={uploading}
-                                                >
-                                                    ✕
-                                                </button>
+                                                >✕</button>
                                             </div>
                                         </div>
                                         <div className={styles.progressBarOuter}>
-                                            <div
-                                                className={styles.progressBarInner}
-                                                style={{ width: `${uploadProgress}%` }}
-                                            />
+                                            <div className={styles.progressBarInner} style={{ width: `${uploadProgress}%` }} />
                                         </div>
                                     </>
                                 )}
@@ -490,7 +555,7 @@ export default function Page() {
 
 /* ================= NAVBAR ================= */
 
-function Navbar({ user, onLogout, activeTab, setActiveTab }: any) {
+function Navbar({ user, onLogout, activeTab, setActiveTab, onEmailClick }: any) {
     const items: ('Rating' | 'Upload')[] = ['Rating', 'Upload']
     return (
         <div className={styles.navbar}>
@@ -510,7 +575,9 @@ function Navbar({ user, onLogout, activeTab, setActiveTab }: any) {
                 ))}
             </div>
             <div className={styles.navRight}>
-                <span className={styles.navEmail}>{user?.email}</span>
+                <button className={styles.navEmailButton} onClick={onEmailClick}>
+                    {user?.email}
+                </button>
                 <button onClick={onLogout} className={styles.navLogout}>Sign Out</button>
             </div>
         </div>
