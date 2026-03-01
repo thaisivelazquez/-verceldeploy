@@ -13,6 +13,7 @@ export default function Page() {
     const [votedIds, setVotedIds] = useState<Set<string>>(new Set())
     const [votes, setVotes] = useState<Record<string, number>>({})
     const [noMoreCaptions, setNoMoreCaptions] = useState(false)
+    const [loadingCaptions, setLoadingCaptions] = useState(true)
 
     const [uploadProgress, setUploadProgress] = useState(0)
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -76,20 +77,23 @@ export default function Page() {
         if (activeTab === 'Rating' && user) loadRatingData()
     }, [activeTab, page, user])
 
-    // Proactively fetch next page when running low on unvoted captions
+    // Auto-advance page only when ALL captions on current page are voted
     useEffect(() => {
-        if (!user || captions.length === 0 || noMoreCaptions) return
-        const remaining = captions.filter(c => !votedIds.has(c.id)).length
-        if (remaining <= 5) {
+        if (
+            captions.length > 0 &&
+            votedIds.size > 0 &&
+            captions.every(c => votedIds.has(c.id))
+        ) {
             setPage(p => p + 1)
         }
-    }, [votedIds])
+    }, [captions, votedIds])
 
     const loadRatingData = async () => {
+        setLoadingCaptions(true)
         const captionsData = await fetchCaptions(page)
         if (!captionsData?.length) {
-            if (page > 0) return
             setNoMoreCaptions(true)
+            setLoadingCaptions(false)
             return
         }
         const ids = [...new Set(captionsData.map((c: any) => c.image_id))]
@@ -97,10 +101,10 @@ export default function Page() {
             fetchImages(ids),
             fetchVoteTotals(captionsData.map((c: any) => c.id))
         ])
+        setLoadingCaptions(false)
     }
 
     const fetchCaptions = async (currentPage: number) => {
-        if (currentPage === 0) setCaptions([])
         const from = currentPage * ITEMS_PER_PAGE
         const to = from + ITEMS_PER_PAGE - 1
         const { data, error } = await supabase
@@ -111,12 +115,7 @@ export default function Page() {
         if (error) return []
         if (!data?.length) return []
         const shuffled = [...data].sort(() => Math.random() - 0.5)
-        // Append new captions, never replace existing ones
-        setCaptions(prev => {
-            const existingIds = new Set(prev.map((c: any) => c.id))
-            const newOnes = shuffled.filter((c: any) => !existingIds.has(c.id))
-            return [...prev, ...newOnes]
-        })
+        setCaptions(shuffled)
         return shuffled
     }
 
@@ -128,8 +127,7 @@ export default function Page() {
             .in('id', imageIds)
         const dict: Record<string, string> = {}
         data?.forEach(img => { dict[img.id] = img.url })
-        // Merge new images into existing dict
-        setImages(prev => ({ ...prev, ...dict }))
+        setImages(dict)
     }
 
     const fetchVoteTotals = async (captionIds: string[]) => {
@@ -142,7 +140,7 @@ export default function Page() {
         data?.forEach((row: any) => {
             totals[row.caption_id] = (totals[row.caption_id] ?? 0) + row.vote_value
         })
-        setVotes(prev => ({ ...prev, ...totals }))
+        setVotes(totals)
     }
 
     /* ================= MY UPLOADS ================= */
@@ -324,10 +322,9 @@ export default function Page() {
         [validCaptions, votedIds]
     )
 
-    // Show no more screen only when truly exhausted
     const isExhausted = useMemo(
-        () => noMoreCaptions && displayedCaptions.length === 0,
-        [noMoreCaptions, displayedCaptions]
+        () => noMoreCaptions && displayedCaptions.length === 0 && !loadingCaptions,
+        [noMoreCaptions, displayedCaptions, loadingCaptions]
     )
 
     const handleVote = (value: number, id: string) => {
@@ -375,7 +372,6 @@ export default function Page() {
                 onEmailClick={handleOpenUploads}
             />
 
-            {/* ================= MY UPLOADS MODAL ================= */}
             {showUploads && (
                 <div className={styles.modalOverlay} onClick={() => setShowUploads(false)}>
                     <div className={styles.modalBox} onClick={e => e.stopPropagation()}>
@@ -415,6 +411,11 @@ export default function Page() {
                             <h2 className={styles.noMoreTitle}>No New Memes</h2>
                             <p className={styles.noMoreSub}>You've rated everything. Check back later!</p>
                         </div>
+                    ) : loadingCaptions && displayedCaptions.length === 0 ? (
+                        <div className={styles.noMoreState}>
+                            <p className={styles.noMoreEmoji}>⏳</p>
+                            <p className={styles.noMoreSub}>Loading captions...</p>
+                        </div>
                     ) : (
                         <div className={styles.ratingGrid}>
                             {displayedCaptions.map((caption) => (
@@ -453,11 +454,7 @@ export default function Page() {
                         <div className={styles.uploadPreviewSection}>
                             <div className={`${styles.ratingCard} ${styles.uploadPreviewCard}`}>
                                 <div className={styles.ratingImageWrapper}>
-                                    <img
-                                        src={uploadedImageUrl}
-                                        alt="Uploaded"
-                                        className={styles.ratingImage}
-                                    />
+                                    <img src={uploadedImageUrl} alt="Uploaded" className={styles.ratingImage} />
                                 </div>
                                 <div className={styles.ratingCardBody}>
                                     <p className={styles.ratingCaption}>
