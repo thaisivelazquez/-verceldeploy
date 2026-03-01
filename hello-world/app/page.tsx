@@ -2,7 +2,6 @@
 
 import { supabase } from '../lib/supabase/client'
 import React, { useState, useEffect, useMemo } from 'react'
-import { motion } from 'framer-motion'
 import styles from './Page.module.css'
 
 export default function Page() {
@@ -11,7 +10,8 @@ export default function Page() {
     const [captions, setCaptions] = useState<any[]>([])
     const [activeTab, setActiveTab] = useState<'Rating' | 'Upload'>('Rating')
     const [page, setPage] = useState(0)
-    const [currentIndex, setCurrentIndex] = useState(0)
+    const [votedIds, setVotedIds] = useState<Set<string>>(new Set())
+    const [votes, setVotes] = useState<Record<string, number>>({})
 
     const [uploadProgress, setUploadProgress] = useState(0)
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -19,7 +19,6 @@ export default function Page() {
     const [uploading, setUploading] = useState(false)
     const [uploadSuccess, setUploadSuccess] = useState(false)
 
-    // NEW: local state for uploaded image + its captions
     const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
     const [uploadedCaptions, setUploadedCaptions] = useState<
         { id: string; caption: string; content: string }[]
@@ -27,6 +26,7 @@ export default function Page() {
     const [uploadedCaptionIndex, setUploadedCaptionIndex] = useState(0)
 
     const ITEMS_PER_PAGE = 20
+    const DISPLAY_LIMIT = 10
 
     /* ================= AUTH ================= */
 
@@ -35,18 +35,15 @@ export default function Page() {
             const { data: { session } } = await supabase.auth.getSession()
             setUser(session?.user ?? null)
         }
-
         getSession()
-
         const { data: { subscription } } =
             supabase.auth.onAuthStateChange((_event, session) => {
                 setUser(session?.user ?? null)
             })
-
         return () => subscription.unsubscribe()
     }, [])
 
-    /* ================= DATA (RATING MODE) ================= */
+    /* ================= DATA ================= */
 
     useEffect(() => {
         if (activeTab === 'Rating') loadRatingData()
@@ -63,41 +60,32 @@ export default function Page() {
     const fetchCaptions = async (currentPage: number) => {
         const from = currentPage * ITEMS_PER_PAGE
         const to = from + ITEMS_PER_PAGE - 1
-
         const { data, error } = await supabase
             .from('captions')
             .select('*')
             .range(from, to)
             .order('id', { ascending: true })
-
         if (error) return []
-
         setCaptions(data ?? [])
         return data ?? []
     }
 
     const fetchImages = async (imageIds: string[]) => {
         if (!imageIds.length) return
-
         const { data } = await supabase
             .from('images')
             .select('id, url')
             .in('id', imageIds)
-
         const dict: Record<string, string> = {}
         data?.forEach(img => { dict[img.id] = img.url })
-
         setImages(dict)
     }
 
-    /* ================= UPLOAD FLOW (UPLOAD MODE) ================= */
+    /* ================= UPLOAD FLOW ================= */
 
-    // Now only called when user hits "Submit" in Upload mode
     const handleFileUpload = async () => {
         if (!user || !selectedFile) return
-
         const file = selectedFile
-
         try {
             setUploading(true)
             setUploadProgress(10)
@@ -106,93 +94,54 @@ export default function Page() {
             setUploadedCaptionIndex(0)
             setUploadedImageUrl(null)
 
-            // 1️⃣ Get JWT token
             const { data: { session } } = await supabase.auth.getSession()
             const token = session?.access_token
             if (!token) throw new Error('No auth token')
 
-            // 2️⃣ Generate presigned URL
             const presignRes = await fetch(
                 'https://api.almostcrackd.ai/pipeline/generate-presigned-url',
                 {
                     method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        contentType: file.type
-                    })
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contentType: file.type })
                 }
             )
-
             if (!presignRes.ok) throw new Error('Failed to generate presigned URL')
-
             const { presignedUrl, cdnUrl } = await presignRes.json()
-
             setUploadProgress(30)
 
-            // 3️⃣ Upload image to S3
             const uploadRes = await fetch(presignedUrl, {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': file.type
-                },
+                headers: { 'Content-Type': file.type },
                 body: file
             })
-
             if (!uploadRes.ok) throw new Error('Failed to upload to S3')
-
             setUploadProgress(60)
 
-            // 4️⃣ Register image with pipeline
             const registerRes = await fetch(
                 'https://api.almostcrackd.ai/pipeline/upload-image-from-url',
                 {
                     method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        imageUrl: cdnUrl,
-                        isCommonUse: false
-                    })
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ imageUrl: cdnUrl, isCommonUse: false })
                 }
             )
-
             if (!registerRes.ok) throw new Error('Failed to register image')
-
             const { imageId } = await registerRes.json()
-
             setUploadProgress(80)
 
-            // 5️⃣ Generate captions
             const captionRes = await fetch(
                 'https://api.almostcrackd.ai/pipeline/generate-captions',
                 {
                     method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        imageId
-                    })
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ imageId })
                 }
             )
-
             if (!captionRes.ok) throw new Error('Failed to generate captions')
-
             const generatedCaptions = await captionRes.json()
-
-            console.log('Generated captions response:')
-            console.log(generatedCaptions)
-            console.log('Is array:', Array.isArray(generatedCaptions))
-
             setUploadProgress(100)
 
-            // 6️⃣ Save captions to Supabase
             if (Array.isArray(generatedCaptions)) {
                 const rows = generatedCaptions.map((c: any) => ({
                     id: c.id,
@@ -202,25 +151,14 @@ export default function Page() {
                     created_datetime_utc: new Date().toISOString(),
                     modified_datetime_utc: new Date().toISOString()
                 }))
-
                 await supabase.from('captions').insert(rows)
-
-                // store locally for carousel
-                setUploadedCaptions(
-                    generatedCaptions.map((c: any) => ({
-                        id: c.id,
-                        caption: c.caption,
-                        content: c.content
-                    }))
-                )
+                setUploadedCaptions(generatedCaptions.map((c: any) => ({
+                    id: c.id, caption: c.caption, content: c.content
+                })))
                 setUploadedCaptionIndex(0)
             }
-
-            // store uploaded image URL locally (center image)
             setUploadedImageUrl(cdnUrl)
-
             setUploadSuccess(true)
-
         } catch (err) {
             console.error(err)
             alert('Upload & caption generation failed')
@@ -239,10 +177,8 @@ export default function Page() {
             setUploadedCaptionIndex(0)
             return
         }
-
         try {
             await supabase.storage.from('images').remove([uploadedFileName])
-
             setSelectedFile(null)
             setUploadedFileName(null)
             setUploadProgress(0)
@@ -256,11 +192,10 @@ export default function Page() {
         }
     }
 
-    /* ================= VOTING (RATING MODE) ================= */
+    /* ================= VOTING ================= */
 
     const submitVote = async (vote_value: number, caption_id: string) => {
         if (!user) return
-
         await supabase.from('caption_votes').insert([{
             created_datetime_utc: new Date().toISOString(),
             modified_datetime_utc: new Date().toISOString(),
@@ -275,9 +210,15 @@ export default function Page() {
         [captions, images]
     )
 
+    const displayedCaptions = useMemo(
+        () => validCaptions.filter(c => !votedIds.has(c.id)).slice(0, DISPLAY_LIMIT),
+        [validCaptions, votedIds]
+    )
+
     const handleVote = (value: number, id: string) => {
         submitVote(value, id)
-        setCurrentIndex(i => i + 1)
+        setVotes(prev => ({ ...prev, [id]: (prev[id] ?? 0) + value }))
+        setVotedIds(prev => new Set([...prev, id]))
     }
 
     /* ================= RENDER ================= */
@@ -292,9 +233,7 @@ export default function Page() {
                             onClick={() =>
                                 supabase.auth.signInWithOAuth({
                                     provider: 'google',
-                                    options: {
-                                        redirectTo: `${window.location.origin}/auth/callback`,
-                                    },
+                                    options: { redirectTo: `${window.location.origin}/auth/callback` },
                                 })
                             }
                             className={styles.button}
@@ -311,193 +250,147 @@ export default function Page() {
         <div className={styles.appBackground}>
             <Navbar
                 user={user}
-                onLogout={async () => {
-                    await supabase.auth.signOut()
-                    setUser(null)
-                }}
+                onLogout={async () => { await supabase.auth.signOut(); setUser(null) }}
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
             />
 
             {activeTab === 'Rating' ? (
-                /* ================= RATING MODE ================= */
                 <div className={styles.pageWrapperCentered}>
                     <h1 className={styles.pageTitle}>Rate Captions</h1>
 
-                    <div className={styles.cardStack}>
-                        {validCaptions
-                            .slice(currentIndex, currentIndex + 2)
-                            .reverse()
-                            .map((caption, index) => {
-                                const isTop = index === 0
-
-                                return (
-                                    <motion.div
-                                        key={caption.id}
-                                        className={styles.swipeCard}
-                                        drag={isTop ? 'x' : false}
-                                        dragConstraints={{ left: 0, right: 0 }}
-                                        onDragEnd={(e, info) => {
-                                            if (!isTop) return
-                                            if (info.offset.x > 120) handleVote(1, caption.id)
-                                            if (info.offset.x < -120) handleVote(-1, caption.id)
-                                        }}
-                                        initial={{ scale: isTop ? 1 : 0.95 }}
-                                        animate={{
-                                            scale: isTop ? 1 : 0.95,
-                                            y: isTop ? 0 : 10
-                                        }}
-                                        style={{ zIndex: isTop ? 2 : 1 }}
-                                    >
+                    {displayedCaptions.length === 0 ? (
+                        <div className={styles.emptyState}>
+                            <p className={styles.emptyText}>You've rated everything!</p>
+                            <button
+                                className={styles.button}
+                                onClick={() => {
+                                    setVotedIds(new Set())
+                                    setPage(p => p + 1)
+                                }}
+                            >
+                                Load More
+                            </button>
+                        </div>
+                    ) : (
+                        <div className={styles.ratingGrid}>
+                            {displayedCaptions.map((caption) => (
+                                <div key={caption.id} className={styles.ratingCard}>
+                                    <div className={styles.ratingImageWrapper}>
                                         <img
                                             src={images[caption.image_id]}
-                                            className={styles.cardImage}
+                                            className={styles.ratingImage}
                                             alt=""
                                         />
-
-                                        <div className={styles.cardContent}>
-                                            <h3 className={styles.cardCaption}>
-                                                {caption.caption}
-                                            </h3>
-                                            <p className={styles.cardDescription}>
-                                                {caption.content}
-                                            </p>
+                                    </div>
+                                    <div className={styles.ratingCardBody}>
+                                        <p className={styles.ratingCaption}>
+                                            {caption.caption || caption.content || caption.text || 'No caption'}
+                                        </p>
+                                        <div className={styles.ratingFooter}>
+                                            <span className={styles.ratingScore}>
+                                                ★ {votes[caption.id] ?? 0}
+                                            </span>
+                                            <div className={styles.ratingButtons}>
+                                                <button
+                                                    className={styles.upvoteBtn}
+                                                    onClick={() => handleVote(1, caption.id)}
+                                                >
+                                                    ▲
+                                                </button>
+                                                <button
+                                                    className={styles.downvoteBtn}
+                                                    onClick={() => handleVote(-1, caption.id)}
+                                                >
+                                                    ▼
+                                                </button>
+                                            </div>
                                         </div>
-                                    </motion.div>
-                                )
-                            })}
-
-                        {currentIndex >= validCaptions.length && (
-                            <div className={styles.loadMoreCard}>
-                                <button
-                                    onClick={() => {
-                                        setCurrentIndex(0)
-                                        setPage(p => p + 1)
-                                    }}
-                                    className={styles.button}
-                                >
-                                    Load More Images
-                                </button>
-                            </div>
-                        )}
-                    </div>
-
-                    {validCaptions[currentIndex] && (
-                        <div className={styles.voteControls}>
-                            <button
-                                className={styles.downvoteButtonLarge}
-                                onClick={() =>
-                                    handleVote(-1, validCaptions[currentIndex].id)
-                                }
-                            >
-                                ⬅ Downvote
-                            </button>
-
-                            <button
-                                className={styles.upvoteButtonLarge}
-                                onClick={() =>
-                                    handleVote(1, validCaptions[currentIndex].id)
-                                }
-                            >
-                                Upvote ➡
-                            </button>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     )}
                 </div>
             ) : (
-                /* ================= UPLOAD MODE ================= */
                 <div className={styles.pageWrapperCentered}>
                     <h1 className={styles.pageTitle}>Upload Your Photos to Generate your Captions</h1>
 
-                    {/* If we already uploaded successfully, only show image + carousel */}
-                   {uploadSuccess && uploadedImageUrl && uploadedCaptions.length > 0 ? (
-                       <div className={styles.uploadPreviewSection}>
-                           <div className={styles.uploadPreviewImageWrapper}>
-                               <img
-                                   src={uploadedImageUrl}
-                                   alt="Uploaded"
-                                   className={styles.uploadPreviewImage}
-                               />
-                           </div>
+                    {uploadSuccess && uploadedImageUrl && uploadedCaptions.length > 0 ? (
+                        <div className={styles.uploadPreviewSection}>
+                            <div className={styles.uploadPreviewImageWrapper}>
+                                <img
+                                    src={uploadedImageUrl}
+                                    alt="Uploaded"
+                                    className={styles.uploadPreviewImage}
+                                />
+                                <div className={styles.cardOverlayCaption}>
+                                    <div className={styles.captionContent}>
+                                        <h3 className={styles.cardCaptionOverlay}>
+                                            {uploadedCaptions[uploadedCaptionIndex].caption}
+                                        </h3>
+                                        <p className={styles.cardDescriptionOverlay}>
+                                            {uploadedCaptions[uploadedCaptionIndex].content}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
 
-                           <div className={styles.captionCarousel}>
-                               <button
-                                   type="button"
-                                   className={`${styles.carouselNavButton} ${styles.navLogout}`}
-                                   onClick={() =>
-                                       setUploadedCaptionIndex((prev) =>
-                                           prev === 0
-                                               ? uploadedCaptions.length - 1
-                                               : prev - 1
-                                       )
-                                   }
-                               >
-                                   ◀
-                               </button>
+                            <div className={styles.captionCarouselControls}>
+                                <button
+                                    type="button"
+                                    className={styles.carouselNavButton}
+                                    onClick={() =>
+                                        setUploadedCaptionIndex((prev) =>
+                                            prev === 0 ? uploadedCaptions.length - 1 : prev - 1
+                                        )
+                                    }
+                                >
+                                    ◀ Previous
+                                </button>
+                                <div className={styles.carouselDots}>
+                                    {uploadedCaptions.map((c, idx) => (
+                                        <button
+                                            key={c.id}
+                                            type="button"
+                                            onClick={() => setUploadedCaptionIndex(idx)}
+                                            className={`${styles.carouselDot} ${idx === uploadedCaptionIndex ? styles.carouselDotActive : ''}`}
+                                        />
+                                    ))}
+                                </div>
+                                <button
+                                    type="button"
+                                    className={styles.carouselNavButton}
+                                    onClick={() =>
+                                        setUploadedCaptionIndex((prev) =>
+                                            prev === uploadedCaptions.length - 1 ? 0 : prev + 1
+                                        )
+                                    }
+                                >
+                                    Next ▶
+                                </button>
+                            </div>
 
-                               <div className={styles.captionCarouselContent}>
-                                   <h3 className={styles.carouselCaptionTitle}>
-                                       {uploadedCaptions[uploadedCaptionIndex].caption}
-                                   </h3>
-                                   <p className={styles.carouselCaptionBody}>
-                                       {uploadedCaptions[uploadedCaptionIndex].content}
-                                   </p>
-
-                                   <div className={styles.carouselDots}>
-                                       {uploadedCaptions.map((c, idx) => (
-                                           <button
-                                               key={c.id}
-                                               type="button"
-                                               onClick={() => setUploadedCaptionIndex(idx)}
-                                               className={`${styles.carouselDot} ${
-                                                   idx === uploadedCaptionIndex
-                                                       ? styles.carouselDotActive
-                                                       : ''
-                                               }`}
-                                           />
-                                       ))}
-                                   </div>
-                               </div>
-
-                               <button
-                                   type="button"
-                                   className={`${styles.carouselNavButton} ${styles.navLogout}`}
-                                   onClick={() =>
-                                       setUploadedCaptionIndex((prev) =>
-                                           prev === uploadedCaptions.length - 1
-                                               ? 0
-                                               : prev + 1
-                                       )
-                                   }
-                               >
-                                   ▶
-                               </button>
-                           </div>
-
-                           {/* ========== NEW: Upload Another Photo button ========== */}
-                           <div style={{ marginTop: 24 }}>
-                               <button
-                                   type="button"
-                                   onClick={() => {
-                                       setSelectedFile(null)
-                                       setUploadProgress(0)
-                                       setUploadSuccess(false)
-                                       setUploadedImageUrl(null)
-                                       setUploadedCaptions([])
-                                       setUploadedCaptionIndex(0)
-                                       setUploadedFileName(null)
-                                   }}
-                                   className={styles.navLogout}
-                               >
-                                   Upload Another Photo
-                               </button>
-                           </div>
-                       </div>
-                   ) : (
-                       // ... rest of the upload form stays the same
-
+                            <div style={{ marginTop: 24 }}>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setSelectedFile(null)
+                                        setUploadProgress(0)
+                                        setUploadSuccess(false)
+                                        setUploadedImageUrl(null)
+                                        setUploadedCaptions([])
+                                        setUploadedCaptionIndex(0)
+                                        setUploadedFileName(null)
+                                    }}
+                                    className={styles.navLogout}
+                                >
+                                    Upload Another Photo
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
                         <>
-                            {/* Step 1: select file + preview + submit button */}
                             <div
                                 className={styles.uploadCard}
                                 onDragOver={(e) => e.preventDefault()}
@@ -515,15 +408,12 @@ export default function Page() {
                                 }}
                             >
                                 <div className={styles.uploadDropzone}>
-                                    <div/>
-
                                     <p className={styles.uploadTitle}>
                                         Drop your image here, or <span className={styles.uploadBrowse}>browse</span>
                                     </p>
                                     <p className={styles.uploadSubtext}>
                                         Supports: JPEG, JPG, PNG, WEBP, GIF and HEIC
                                     </p>
-
                                     <input
                                         type="file"
                                         accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,image/heic"
@@ -559,7 +449,6 @@ export default function Page() {
                                                     </div>
                                                 </div>
                                             </div>
-
                                             <div className={styles.fileRight}>
                                                 <button
                                                     className={styles.deleteIconButton}
@@ -571,7 +460,6 @@ export default function Page() {
                                                 </button>
                                             </div>
                                         </div>
-
                                         <div className={styles.progressBarOuter}>
                                             <div
                                                 className={styles.progressBarInner}
@@ -582,7 +470,6 @@ export default function Page() {
                                 )}
                             </div>
 
-                            {/* Submit button to actually upload + generate captions */}
                             <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center' }}>
                                 <button
                                     type="button"
@@ -605,40 +492,26 @@ export default function Page() {
 
 function Navbar({ user, onLogout, activeTab, setActiveTab }: any) {
     const items: ('Rating' | 'Upload')[] = ['Rating', 'Upload']
-
     return (
         <div className={styles.navbar}>
             <div className={styles.navInner}>
                 <div
                     className={styles.navIndicator}
-                    style={{
-                        transform:
-                            activeTab === 'Rating'
-                                ? 'translateX(0%)'
-                                : 'translateX(100%)'
-                    }}
+                    style={{ transform: activeTab === 'Rating' ? 'translateX(0%)' : 'translateX(100%)' }}
                 />
                 {items.map((item) => (
                     <button
                         key={item}
                         onClick={() => setActiveTab(item)}
-                        className={`${styles.navItem} ${
-                            activeTab === item ? styles.navItemActive : ''
-                        }`}
+                        className={`${styles.navItem} ${activeTab === item ? styles.navItemActive : ''}`}
                     >
                         {item}
                     </button>
                 ))}
             </div>
-
             <div className={styles.navRight}>
                 <span className={styles.navEmail}>{user?.email}</span>
-                <button
-                    onClick={onLogout}
-                    className={styles.navLogout}
-                >
-                    Sign Out
-                </button>
+                <button onClick={onLogout} className={styles.navLogout}>Sign Out</button>
             </div>
         </div>
     )
