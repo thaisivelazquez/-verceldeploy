@@ -34,8 +34,8 @@ export default function Page() {
     >([])
     const [loadingUploads, setLoadingUploads] = useState(false)
 
-    const ITEMS_PER_PAGE = 500
-    const DISPLAY_LIMIT = 10
+    const ITEMS_PER_PAGE = 50000
+    const DISPLAY_LIMIT = 12
 
 
 
@@ -118,39 +118,35 @@ export default function Page() {
         }
     }, [captions, votedIds])
 
-    const loadRatingData = async () => {
-        setLoadingCaptions(true)
-        const captionsData = await fetchCaptions(page)
-        if (!captionsData?.length) {
-            setNoMoreCaptions(true)
-            setLoadingCaptions(false)
-            return
-        }
-        await fetchVoteTotals(captionsData.map((c: any) => c.id))
+const loadRatingData = async () => {
+    setLoadingCaptions(true)
+    const captionsData = await fetchCaptions(page)
+    if (!captionsData?.length) {
+        setNoMoreCaptions(true)
         setLoadingCaptions(false)
+        return
     }
+    await fetchVoteTotals(captionsData.map((c: any) => c.id))
+    setLoadingCaptions(false)
+}
 
-    const fetchCaptions = async (currentPage: number) => {
-        const from = currentPage * ITEMS_PER_PAGE
-        const to = from + ITEMS_PER_PAGE - 1
-        const { data, error } = await supabase
-            .from('captions')
-            .select('*, images(url)')
-            .range(from, to)
-            .order('id', { ascending: true })
-        if (error) return []
-        if (!data?.length) return []
 
-        const unvoted = data.filter((c: any) => !votedIds.has(c.id))
-        if (!unvoted.length) {
-            setPage(p => p + 1)
-            return []
-        }
+const fetchCaptions = async (currentPage: number) => {
+    const from = currentPage * ITEMS_PER_PAGE
+    const to = from + ITEMS_PER_PAGE - 1
+    const { data, error } = await supabase
+        .from('captions')
+        .select('*, images(url)')
+        .range(from, to)
+        .order('id', { ascending: true })
+    if (error || !data?.length) return []
 
-        const shuffled = stableShuffle(unvoted, user.id, currentPage)
-        setCaptions(shuffled)
-        return shuffled
-    }
+    const shuffled = stableShuffle(data, user.id, currentPage)
+    setCaptions(shuffled)
+    return shuffled
+}
+
+
 
     const fetchVoteTotals = async (captionIds: string[]) => {
         if (!captionIds.length) return
