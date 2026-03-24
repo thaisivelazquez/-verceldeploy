@@ -13,7 +13,7 @@ export default function Page() {
     const [votes, setVotes] = useState<Record<string, number>>({})
     const [noMoreCaptions, setNoMoreCaptions] = useState(false)
     const [loadingCaptions, setLoadingCaptions] = useState(true)
-    const [lightboxUrl, setLightboxUrl] = useState<string | null>(null) // ← NEW
+    const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
     const [uploadProgress, setUploadProgress] = useState(0)
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -36,6 +36,24 @@ export default function Page() {
 
     const ITEMS_PER_PAGE = 500
     const DISPLAY_LIMIT = 10
+
+    /* ================= SEEDED SHUFFLE ================= */
+
+    const seededRandom = (seed: string) => {
+        let hash = 0
+        for (let i = 0; i < seed.length; i++) {
+            hash = (Math.imul(31, hash) + seed.charCodeAt(i)) | 0
+        }
+        return () => {
+            hash = (Math.imul(hash ^ (hash >>> 16), 0x45d9f3b)) | 0
+            return ((hash >>> 0) / 0xffffffff)
+        }
+    }
+
+    const stableShuffle = (arr: any[], userId: string, currentPage: number) => {
+        const rng = seededRandom(`${userId}-${currentPage}`)
+        return [...arr].sort(() => rng() - 0.5)
+    }
 
     /* ================= AUTH ================= */
 
@@ -60,7 +78,7 @@ export default function Page() {
         }
         window.addEventListener('keydown', handleKey)
         return () => window.removeEventListener('keydown', handleKey)
-    }, []) // ← NEW
+    }, [])
 
     /* ================= LOAD PERSISTED VOTES ================= */
 
@@ -126,7 +144,7 @@ export default function Page() {
             return []
         }
 
-        const shuffled = [...unvoted].sort(() => Math.random() - 0.5)
+        const shuffled = stableShuffle(unvoted, user.id, currentPage)
         setCaptions(shuffled)
         return shuffled
     }
@@ -680,3 +698,4 @@ function Navbar({ user, onLogout, activeTab, setActiveTab, onEmailClick }: any) 
         </div>
     )
 }
+
