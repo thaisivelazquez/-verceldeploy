@@ -13,6 +13,7 @@ export default function Page() {
     const [votes, setVotes] = useState<Record<string, number>>({})
     const [noMoreCaptions, setNoMoreCaptions] = useState(false)
     const [loadingCaptions, setLoadingCaptions] = useState(true)
+    const [lightboxUrl, setLightboxUrl] = useState<string | null>(null) // ← NEW
 
     const [uploadProgress, setUploadProgress] = useState(0)
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -34,9 +35,9 @@ export default function Page() {
     const [loadingUploads, setLoadingUploads] = useState(false)
 
     const ITEMS_PER_PAGE = 500
-    const DISPLAY_LIMIT = 8
+    const DISPLAY_LIMIT = 10
 
-
+    /* ================= AUTH ================= */
 
     useEffect(() => {
         const getSession = async () => {
@@ -51,7 +52,17 @@ export default function Page() {
         return () => subscription.unsubscribe()
     }, [])
 
+    /* ================= CLOSE LIGHTBOX ON ESC ================= */
 
+    useEffect(() => {
+        const handleKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setLightboxUrl(null)
+        }
+        window.addEventListener('keydown', handleKey)
+        return () => window.removeEventListener('keydown', handleKey)
+    }, []) // ← NEW
+
+    /* ================= LOAD PERSISTED VOTES ================= */
 
     useEffect(() => {
         if (!user) return
@@ -70,7 +81,7 @@ export default function Page() {
         loadVotedIds()
     }, [user])
 
-
+    /* ================= DATA ================= */
 
     useEffect(() => {
         if (activeTab === 'Rating' && user) loadRatingData()
@@ -103,7 +114,7 @@ export default function Page() {
         const to = from + ITEMS_PER_PAGE - 1
         const { data, error } = await supabase
             .from('captions')
-            .select('*, images(url)')  // ← join images table to get URL
+            .select('*, images(url)')
             .range(from, to)
             .order('id', { ascending: true })
         if (error) return []
@@ -133,7 +144,7 @@ export default function Page() {
         setVotes(totals)
     }
 
-
+    /* ================= MY UPLOADS ================= */
 
     const saveCaption = (userId: string, imageUrl: string, captionId: string, captionText: string) => {
         const key = `saved_${userId}`
@@ -166,6 +177,7 @@ export default function Page() {
         saveCaption(user.id, uploadedImageUrl, current.id, current.caption || current.content)
     }
 
+    /* ================= UPLOAD FLOW ================= */
 
     const handleFileUpload = async () => {
         if (!user || !selectedFile) return
@@ -281,7 +293,7 @@ export default function Page() {
         }
     }
 
-
+    /* ================= VOTING ================= */
 
     const submitVote = async (vote_value: number, caption_id: string) => {
         if (!user) return
@@ -323,7 +335,7 @@ export default function Page() {
         setVotedIds(prev => new Set([...prev, id]))
     }
 
-
+    /* ================= RENDER ================= */
 
     if (!user) {
         return (
@@ -360,6 +372,38 @@ export default function Page() {
                 setActiveTab={setActiveTab}
                 onEmailClick={handleOpenUploads}
             />
+
+            {/* ================= LIGHTBOX ================= */}
+            {lightboxUrl && (
+                <div
+                    className={styles.modalOverlay}
+                    onClick={() => setLightboxUrl(null)}
+                    style={{ zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                    <div
+                        onClick={e => e.stopPropagation()}
+                        style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}
+                    >
+                        <button
+                            onClick={() => setLightboxUrl(null)}
+                            style={{
+                                position: 'absolute', top: -16, right: -16,
+                                background: '#333', color: '#fff', border: 'none',
+                                borderRadius: '50%', width: 32, height: 32,
+                                cursor: 'pointer', fontSize: 16, zIndex: 1001
+                            }}
+                        >✕</button>
+                        <img
+                            src={lightboxUrl}
+                            style={{
+                                maxWidth: '90vw', maxHeight: '90vh',
+                                borderRadius: 12, objectFit: 'contain', display: 'block'
+                            }}
+                            alt=""
+                        />
+                    </div>
+                </div>
+            )}
 
             {showUploads && (
                 <div className={styles.modalOverlay} onClick={() => setShowUploads(false)}>
@@ -409,7 +453,11 @@ export default function Page() {
                         <div className={styles.ratingGrid}>
                             {displayedCaptions.map((caption) => (
                                 <div key={caption.id} className={styles.ratingCard}>
-                                    <div className={styles.ratingImageWrapper}>
+                                    <div
+                                        className={styles.ratingImageWrapper}
+                                        onClick={() => setLightboxUrl(caption.images?.url)}
+                                        style={{ cursor: 'zoom-in' }}
+                                    >
                                         <img
                                             src={caption.images?.url}
                                             className={styles.ratingImage}
@@ -442,7 +490,11 @@ export default function Page() {
                     {uploadSuccess && uploadedImageUrl && uploadedCaptions.length > 0 ? (
                         <div className={styles.uploadPreviewSection}>
                             <div className={`${styles.ratingCard} ${styles.uploadPreviewCard}`}>
-                                <div className={styles.ratingImageWrapper}>
+                                <div
+                                    className={styles.ratingImageWrapper}
+                                    onClick={() => setLightboxUrl(uploadedImageUrl)}
+                                    style={{ cursor: 'zoom-in' }}
+                                >
                                     <img src={uploadedImageUrl} alt="Uploaded" className={styles.ratingImage} />
                                 </div>
                                 <div className={styles.ratingCardBody}>
@@ -598,7 +650,7 @@ export default function Page() {
     )
 }
 
-
+/* ================= NAVBAR ================= */
 
 function Navbar({ user, onLogout, activeTab, setActiveTab, onEmailClick }: any) {
     const items: ('Rating' | 'Upload')[] = ['Rating', 'Upload']
