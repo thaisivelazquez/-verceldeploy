@@ -23,21 +23,21 @@ export default function Page() {
 
     const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
     const [uploadedCaptions, setUploadedCaptions] = useState<
-        { id: string; caption: string; content: string }[]
+        { id: string; caption: string; content: string; is_featured: boolean }[]
     >([])
     const [uploadedCaptionIndex, setUploadedCaptionIndex] = useState(0)
     const [savedCaptionIds, setSavedCaptionIds] = useState<Set<string>>(new Set())
 
     const [showUploads, setShowUploads] = useState(false)
     const [myUploadedImages, setMyUploadedImages] = useState<
-        { entryId: string; imageUrl: string; caption: string; saved: boolean }[]
+        { entryId: string; imageUrl: string; caption: string }[]
     >([])
     const [loadingUploads, setLoadingUploads] = useState(false)
 
     const ITEMS_PER_PAGE = 500
     const DISPLAY_LIMIT = 10
 
-    /* ================= SEEDED SHUFFLE ================= */
+
 
     const seededRandom = (seed: string) => {
         let hash = 0
@@ -55,7 +55,7 @@ export default function Page() {
         return [...arr].sort(() => rng() - 0.5)
     }
 
-    /* ================= AUTH ================= */
+
 
     useEffect(() => {
         const getSession = async () => {
@@ -70,17 +70,20 @@ export default function Page() {
         return () => subscription.unsubscribe()
     }, [])
 
-    /* ================= CLOSE LIGHTBOX ON ESC ================= */
+
 
     useEffect(() => {
         const handleKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') setLightboxUrl(null)
+            if (e.key === 'Escape') {
+                setLightboxUrl(null)
+                setShowUploads(false)
+            }
         }
         window.addEventListener('keydown', handleKey)
         return () => window.removeEventListener('keydown', handleKey)
     }, [])
 
-    /* ================= LOAD PERSISTED VOTES ================= */
+
 
     useEffect(() => {
         if (!user) return
@@ -99,7 +102,7 @@ export default function Page() {
         loadVotedIds()
     }, [user])
 
-    /* ================= DATA ================= */
+
 
     useEffect(() => {
         if (activeTab === 'Rating' && user) loadRatingData()
@@ -162,40 +165,57 @@ export default function Page() {
         setVotes(totals)
     }
 
-    /* ================= MY UPLOADS ================= */
 
-    const saveCaption = (userId: string, imageUrl: string, captionId: string, captionText: string) => {
-        const key = `saved_${userId}`
-        const existing: any[] = JSON.parse(localStorage.getItem(key) ?? '[]')
-        if (!existing.find((e: any) => e.entryId === captionId)) {
-            existing.unshift({ entryId: captionId, imageUrl, caption: captionText, saved: true })
-            localStorage.setItem(key, JSON.stringify(existing))
-        }
-        setSavedCaptionIds(prev => new Set([...prev, captionId]))
+
+    const handleSaveCaption = async () => {
+        if (!user || uploadedCaptions.length === 0) return
+        const current = uploadedCaptions[uploadedCaptionIndex]
+        if (savedCaptionIds.has(current.id)) return
+
+        await supabase
+            .from('captions')
+            .update({ is_featured: true })
+            .eq('id', current.id)
+
+        setSavedCaptionIds(prev => new Set([...prev, current.id]))
+        setUploadedCaptions(prev =>
+            prev.map(c => c.id === current.id ? { ...c, is_featured: true } : c)
+        )
     }
 
-    const loadMyUploads = () => {
-        if (!user) return
-        setLoadingUploads(true)
-        const key = `saved_${user.id}`
-        const stored: { entryId: string; imageUrl: string; caption: string; saved: boolean }[] =
-            JSON.parse(localStorage.getItem(key) ?? '[]')
-        setMyUploadedImages(stored)
-        setLoadingUploads(false)
+
+
+const loadMyUploads = async () => {
+    if (!user) return
+    setLoadingUploads(true)
+    console.log('querying with profile_id:', user.id)
+    const { data, error } = await supabase
+        .from('captions')
+        .select('id, content, images(url)')
+        .eq('profile_id', user.id)
+        .order('created_datetime_utc', { ascending: false })
+    console.log('data:', data, 'error:', error)
+    if (!error && data) {
+        const mapped = data
+            .filter((c: any) => c.images?.url)
+            .map((c: any) => ({
+                entryId: c.id,
+                imageUrl: c.images.url,
+                caption: c.content || ''
+            }))
+        setMyUploadedImages(mapped)
     }
+    setLoadingUploads(false)
+}
+
+
 
     const handleOpenUploads = () => {
         setShowUploads(true)
         loadMyUploads()
     }
 
-    const handleSaveCaption = () => {
-        if (!user || !uploadedImageUrl || uploadedCaptions.length === 0) return
-        const current = uploadedCaptions[uploadedCaptionIndex]
-        saveCaption(user.id, uploadedImageUrl, current.id, current.caption || current.content)
-    }
 
-    /* ================= UPLOAD FLOW ================= */
 
     const handleFileUpload = async () => {
         if (!user || !selectedFile) return
@@ -268,7 +288,10 @@ export default function Page() {
                 }))
                 await supabase.from('captions').insert(rows)
                 const mapped = generatedCaptions.map((c: any) => ({
-                    id: c.id, caption: c.caption, content: c.content
+                    id: c.id,
+                    caption: c.caption,
+                    content: c.content,
+                    is_featured: false
                 }))
                 setUploadedCaptions(mapped)
                 setUploadedCaptionIndex(0)
@@ -311,7 +334,7 @@ export default function Page() {
         }
     }
 
-    /* ================= VOTING ================= */
+
 
     const submitVote = async (vote_value: number, caption_id: string) => {
         if (!user) return
@@ -353,7 +376,7 @@ export default function Page() {
         setVotedIds(prev => new Set([...prev, id]))
     }
 
-    /* ================= RENDER ================= */
+
 
     if (!user) {
         return (
@@ -391,12 +414,12 @@ export default function Page() {
                 onEmailClick={handleOpenUploads}
             />
 
-            {/* ================= LIGHTBOX ================= */}
+
             {lightboxUrl && (
                 <div
                     className={styles.modalOverlay}
                     onClick={() => setLightboxUrl(null)}
-                    style={{ zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    style={{ zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 >
                     <div
                         onClick={e => e.stopPropagation()}
@@ -408,7 +431,7 @@ export default function Page() {
                                 position: 'absolute', top: -16, right: -16,
                                 background: '#333', color: '#fff', border: 'none',
                                 borderRadius: '50%', width: 32, height: 32,
-                                cursor: 'pointer', fontSize: 16, zIndex: 1001
+                                cursor: 'pointer', fontSize: 16, zIndex: 1101
                             }}
                         >✕</button>
                         <img
@@ -423,22 +446,39 @@ export default function Page() {
                 </div>
             )}
 
+
             {showUploads && (
                 <div className={styles.modalOverlay} onClick={() => setShowUploads(false)}>
                     <div className={styles.modalBox} onClick={e => e.stopPropagation()}>
                         <div className={styles.modalHeader}>
-                            <h2 className={styles.modalTitle}>My Saved Captions</h2>
+                            <div>
+                                <h2 className={styles.modalTitle}>My Saved Captions</h2>
+                                <p style={{ color: '#888', fontSize: 13, margin: '2px 0 0' }}>
+                                    {myUploadedImages.length} saved caption{myUploadedImages.length !== 1 ? 's' : ''}
+                                </p>
+                            </div>
                             <button className={styles.modalClose} onClick={() => setShowUploads(false)}>✕</button>
                         </div>
+
                         {loadingUploads ? (
                             <p className={styles.modalEmpty}>Loading...</p>
                         ) : myUploadedImages.length === 0 ? (
-                            <p className={styles.modalEmpty}>No saved captions yet. Upload a photo and save a caption!</p>
+                            <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+                                <p style={{ fontSize: 40, margin: '0 0 12px' }}>📭</p>
+                                <p className={styles.modalEmpty}>No saved captions yet.</p>
+                                <p style={{ color: '#666', fontSize: 13, margin: '4px 0 0' }}>
+                                    Upload a photo and tap ♡ Save on a caption to see it here.
+                                </p>
+                            </div>
                         ) : (
                             <div className={styles.modalGrid}>
                                 {myUploadedImages.map(({ entryId, imageUrl, caption }) => (
                                     <div key={entryId} className={styles.modalCard}>
-                                        <div className={styles.modalImageWrapper}>
+                                        <div
+                                            className={styles.modalImageWrapper}
+                                            onClick={() => setLightboxUrl(imageUrl)}
+                                            style={{ cursor: 'zoom-in' }}
+                                        >
                                             <img src={imageUrl} className={styles.modalImage} alt="" />
                                         </div>
                                         <div className={styles.modalCardBody}>
@@ -520,14 +560,7 @@ export default function Page() {
                                         "{currentCaption?.caption || currentCaption?.content}"
                                     </p>
                                     <div className={styles.ratingFooter}>
-                                        <button
-                                            type="button"
-                                            className={currentIsSaved ? styles.saveButtonSaved : styles.saveButton}
-                                            onClick={handleSaveCaption}
-                                            disabled={currentIsSaved}
-                                        >
-                                            {currentIsSaved ? '✓ Saved' : '♡ Save'}
-                                        </button>
+
                                     </div>
                                 </div>
                             </div>
@@ -668,7 +701,7 @@ export default function Page() {
     )
 }
 
-/* ================= NAVBAR ================= */
+
 
 function Navbar({ user, onLogout, activeTab, setActiveTab, onEmailClick }: any) {
     const items: ('Rating' | 'Upload')[] = ['Rating', 'Upload']
