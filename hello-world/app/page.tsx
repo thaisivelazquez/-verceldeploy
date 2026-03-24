@@ -6,7 +6,6 @@ import styles from './Page.module.css'
 
 export default function Page() {
     const [user, setUser] = useState<any>(null)
-    const [images, setImages] = useState<Record<string, string>>({})
     const [captions, setCaptions] = useState<any[]>([])
     const [activeTab, setActiveTab] = useState<'Rating' | 'Upload'>('Rating')
     const [page, setPage] = useState(0)
@@ -34,10 +33,10 @@ export default function Page() {
     >([])
     const [loadingUploads, setLoadingUploads] = useState(false)
 
-    const ITEMS_PER_PAGE = 20
-    const DISPLAY_LIMIT = 10
+    const ITEMS_PER_PAGE = 500
+    const DISPLAY_LIMIT = 8
 
-    /* ================= AUTH ================= */
+
 
     useEffect(() => {
         const getSession = async () => {
@@ -52,7 +51,7 @@ export default function Page() {
         return () => subscription.unsubscribe()
     }, [])
 
-    /* ================= LOAD PERSISTED VOTES ================= */
+
 
     useEffect(() => {
         if (!user) return
@@ -71,13 +70,12 @@ export default function Page() {
         loadVotedIds()
     }, [user])
 
-    /* ================= DATA ================= */
+
 
     useEffect(() => {
         if (activeTab === 'Rating' && user) loadRatingData()
     }, [activeTab, page, user])
 
-    // Auto-advance page only when ALL captions on current page are voted
     useEffect(() => {
         if (
             captions.length > 0 &&
@@ -96,11 +94,7 @@ export default function Page() {
             setLoadingCaptions(false)
             return
         }
-        const ids = [...new Set(captionsData.map((c: any) => c.image_id))]
-        await Promise.all([
-            fetchImages(ids),
-            fetchVoteTotals(captionsData.map((c: any) => c.id))
-        ])
+        await fetchVoteTotals(captionsData.map((c: any) => c.id))
         setLoadingCaptions(false)
     }
 
@@ -109,25 +103,21 @@ export default function Page() {
         const to = from + ITEMS_PER_PAGE - 1
         const { data, error } = await supabase
             .from('captions')
-            .select('*')
+            .select('*, images(url)')  // ← join images table to get URL
             .range(from, to)
             .order('id', { ascending: true })
         if (error) return []
         if (!data?.length) return []
-        const shuffled = [...data].sort(() => Math.random() - 0.5)
+
+        const unvoted = data.filter((c: any) => !votedIds.has(c.id))
+        if (!unvoted.length) {
+            setPage(p => p + 1)
+            return []
+        }
+
+        const shuffled = [...unvoted].sort(() => Math.random() - 0.5)
         setCaptions(shuffled)
         return shuffled
-    }
-
-    const fetchImages = async (imageIds: string[]) => {
-        if (!imageIds.length) return
-        const { data } = await supabase
-            .from('images')
-            .select('id, url')
-            .in('id', imageIds)
-        const dict: Record<string, string> = {}
-        data?.forEach(img => { dict[img.id] = img.url })
-        setImages(dict)
     }
 
     const fetchVoteTotals = async (captionIds: string[]) => {
@@ -143,7 +133,7 @@ export default function Page() {
         setVotes(totals)
     }
 
-    /* ================= MY UPLOADS ================= */
+
 
     const saveCaption = (userId: string, imageUrl: string, captionId: string, captionText: string) => {
         const key = `saved_${userId}`
@@ -176,7 +166,6 @@ export default function Page() {
         saveCaption(user.id, uploadedImageUrl, current.id, current.caption || current.content)
     }
 
-    /* ================= UPLOAD FLOW ================= */
 
     const handleFileUpload = async () => {
         if (!user || !selectedFile) return
@@ -292,7 +281,7 @@ export default function Page() {
         }
     }
 
-    /* ================= VOTING ================= */
+
 
     const submitVote = async (vote_value: number, caption_id: string) => {
         if (!user) return
@@ -313,8 +302,8 @@ export default function Page() {
     }
 
     const validCaptions = useMemo(
-        () => captions.filter(c => images[c.image_id]),
-        [captions, images]
+        () => captions.filter(c => c.images?.url && (c.caption || c.content || c.text || '').trim().length > 0),
+        [captions]
     )
 
     const displayedCaptions = useMemo(
@@ -334,7 +323,7 @@ export default function Page() {
         setVotedIds(prev => new Set([...prev, id]))
     }
 
-    /* ================= RENDER ================= */
+
 
     if (!user) {
         return (
@@ -422,7 +411,7 @@ export default function Page() {
                                 <div key={caption.id} className={styles.ratingCard}>
                                     <div className={styles.ratingImageWrapper}>
                                         <img
-                                            src={images[caption.image_id]}
+                                            src={caption.images?.url}
                                             className={styles.ratingImage}
                                             alt=""
                                         />
@@ -609,7 +598,7 @@ export default function Page() {
     )
 }
 
-/* ================= NAVBAR ================= */
+
 
 function Navbar({ user, onLogout, activeTab, setActiveTab, onEmailClick }: any) {
     const items: ('Rating' | 'Upload')[] = ['Rating', 'Upload']
