@@ -37,8 +37,6 @@ export default function Page() {
     const ITEMS_PER_PAGE = 50000
     const DISPLAY_LIMIT = 12
 
-
-
     const seededRandom = (seed: string) => {
         let hash = 0
         for (let i = 0; i < seed.length; i++) {
@@ -55,8 +53,6 @@ export default function Page() {
         return [...arr].sort(() => rng() - 0.5)
     }
 
-
-
     useEffect(() => {
         const getSession = async () => {
             const { data: { session } } = await supabase.auth.getSession()
@@ -70,8 +66,6 @@ export default function Page() {
         return () => subscription.unsubscribe()
     }, [])
 
-
-
     useEffect(() => {
         const handleKey = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
@@ -82,8 +76,6 @@ export default function Page() {
         window.addEventListener('keydown', handleKey)
         return () => window.removeEventListener('keydown', handleKey)
     }, [])
-
-
 
     useEffect(() => {
         if (!user) return
@@ -102,8 +94,6 @@ export default function Page() {
         loadVotedIds()
     }, [user])
 
-
-
     useEffect(() => {
         if (activeTab === 'Rating' && user) loadRatingData()
     }, [activeTab, page, user])
@@ -118,35 +108,31 @@ export default function Page() {
         }
     }, [captions, votedIds])
 
-const loadRatingData = async () => {
-    setLoadingCaptions(true)
-    const captionsData = await fetchCaptions(page)
-    if (!captionsData?.length) {
-        setNoMoreCaptions(true)
+    const loadRatingData = async () => {
+        setLoadingCaptions(true)
+        const captionsData = await fetchCaptions(page)
+        if (!captionsData?.length) {
+            setNoMoreCaptions(true)
+            setLoadingCaptions(false)
+            return
+        }
+        await fetchVoteTotals(captionsData.map((c: any) => c.id))
         setLoadingCaptions(false)
-        return
     }
-    await fetchVoteTotals(captionsData.map((c: any) => c.id))
-    setLoadingCaptions(false)
-}
 
-
-const fetchCaptions = async (currentPage: number) => {
-    const from = currentPage * ITEMS_PER_PAGE
-    const to = from + ITEMS_PER_PAGE - 1
-    const { data, error } = await supabase
-        .from('captions')
-        .select('*, images(url)')
-        .range(from, to)
-        .order('id', { ascending: true })
-    if (error || !data?.length) return []
-
-    const shuffled = stableShuffle(data, user.id, currentPage)
-    setCaptions(shuffled)
-    return shuffled
-}
-
-
+    const fetchCaptions = async (currentPage: number) => {
+        const from = currentPage * ITEMS_PER_PAGE
+        const to = from + ITEMS_PER_PAGE - 1
+        const { data, error } = await supabase
+            .from('captions')
+            .select('*, images(url)')
+            .range(from, to)
+            .order('id', { ascending: true })
+        if (error || !data?.length) return []
+        const shuffled = stableShuffle(data, user.id, currentPage)
+        setCaptions(shuffled)
+        return shuffled
+    }
 
     const fetchVoteTotals = async (captionIds: string[]) => {
         if (!captionIds.length) return
@@ -161,57 +147,53 @@ const fetchCaptions = async (currentPage: number) => {
         setVotes(totals)
     }
 
-
-
     const handleSaveCaption = async () => {
         if (!user || uploadedCaptions.length === 0) return
         const current = uploadedCaptions[uploadedCaptionIndex]
         if (savedCaptionIds.has(current.id)) return
-
         await supabase
             .from('captions')
             .update({ is_featured: true })
             .eq('id', current.id)
-
         setSavedCaptionIds(prev => new Set([...prev, current.id]))
         setUploadedCaptions(prev =>
             prev.map(c => c.id === current.id ? { ...c, is_featured: true } : c)
         )
     }
 
-
-
-const loadMyUploads = async () => {
-    if (!user) return
-    setLoadingUploads(true)
-    console.log('querying with profile_id:', user.id)
-    const { data, error } = await supabase
-        .from('captions')
-        .select('id, content, images(url)')
-        .eq('profile_id', user.id)
-        .order('created_datetime_utc', { ascending: false })
-    console.log('data:', data, 'error:', error)
-    if (!error && data) {
-        const mapped = data
-            .filter((c: any) => c.images?.url)
-            .map((c: any) => ({
-                entryId: c.id,
-                imageUrl: c.images.url,
-                caption: c.content || ''
-            }))
-        setMyUploadedImages(mapped)
+    const handleDeleteUploadedCaption = () => {
+        setUploadedCaptions(prev => {
+            const next = prev.filter((_, i) => i !== uploadedCaptionIndex)
+            setUploadedCaptionIndex(i => Math.min(i, Math.max(next.length - 1, 0)))
+            return next
+        })
     }
-    setLoadingUploads(false)
-}
 
-
+    const loadMyUploads = async () => {
+        if (!user) return
+        setLoadingUploads(true)
+        const { data, error } = await supabase
+            .from('captions')
+            .select('id, content, images(url)')
+            .eq('profile_id', user.id)
+            .order('created_datetime_utc', { ascending: false })
+        if (!error && data) {
+            const mapped = data
+                .filter((c: any) => c.images?.url)
+                .map((c: any) => ({
+                    entryId: c.id,
+                    imageUrl: c.images.url,
+                    caption: c.content || ''
+                }))
+            setMyUploadedImages(mapped)
+        }
+        setLoadingUploads(false)
+    }
 
     const handleOpenUploads = () => {
         setShowUploads(true)
         loadMyUploads()
     }
-
-
 
     const handleFileUpload = async () => {
         if (!user || !selectedFile) return
@@ -330,8 +312,6 @@ const loadMyUploads = async () => {
         }
     }
 
-
-
     const submitVote = async (vote_value: number, caption_id: string) => {
         if (!user) return
         if (votedIds.has(caption_id)) return
@@ -372,8 +352,6 @@ const loadMyUploads = async () => {
         setVotedIds(prev => new Set([...prev, id]))
     }
 
-
-
     if (!user) {
         return (
             <div className={styles.appBackground}>
@@ -410,7 +388,6 @@ const loadMyUploads = async () => {
                 onEmailClick={handleOpenUploads}
             />
 
-
             {lightboxUrl && (
                 <div
                     className={styles.modalOverlay}
@@ -442,7 +419,6 @@ const loadMyUploads = async () => {
                 </div>
             )}
 
-
             {showUploads && (
                 <div className={styles.modalOverlay} onClick={() => setShowUploads(false)}>
                     <div className={styles.modalBox} onClick={e => e.stopPropagation()}>
@@ -450,7 +426,7 @@ const loadMyUploads = async () => {
                             <div>
                                 <h2 className={styles.modalTitle}>My Saved Captions</h2>
                                 <p style={{ color: '#888', fontSize: 13, margin: '2px 0 0' }}>
-                                    {myUploadedImages.length} saved caption{myUploadedImages.length !== 1 ? 's' : ''}
+                                    {myUploadedImages.length} saved caption{myUploadedImages.length !== 1 ? 's' : ''} · your unfunny memes
                                 </p>
                             </div>
                             <button className={styles.modalClose} onClick={() => setShowUploads(false)}>✕</button>
@@ -479,6 +455,17 @@ const loadMyUploads = async () => {
                                         </div>
                                         <div className={styles.modalCardBody}>
                                             <p className={styles.modalCaptionText}>"{caption}"</p>
+                                            <button
+                                                type="button"
+                                                className={styles.deleteIconButton}
+                                                onClick={() =>
+                                                    setMyUploadedImages(prev =>
+                                                        prev.filter(i => i.entryId !== entryId)
+                                                    )
+                                                }
+                                            >
+                                                🗑 Delete
+                                            </button>
                                         </div>
                                     </div>
                                 ))}
@@ -555,8 +542,22 @@ const loadMyUploads = async () => {
                                     <p className={styles.ratingCaption}>
                                         "{currentCaption?.caption || currentCaption?.content}"
                                     </p>
-                                    <div className={styles.ratingFooter}>
-
+                                    <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 8 }}>
+                                        <button
+                                            type="button"
+                                            onClick={handleSaveCaption}
+                                            className={styles.navLogout}
+                                            disabled={currentIsSaved}
+                                        >
+                                            {currentIsSaved ? '✓ Saved' : '♡ Save'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={styles.deleteIconButton}
+                                            onClick={handleDeleteUploadedCaption}
+                                        >
+                                            🗑 Delete
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -596,6 +597,26 @@ const loadMyUploads = async () => {
                                     setUploadSuccess(false)
                                     setUploadedImageUrl(null)
                                     setUploadedCaptions([])
+                                    setUploadedCaptionIndex(0)
+                                    setUploadedFileName(null)
+                                    setSavedCaptionIds(new Set())
+                                }}
+                                className={styles.navLogout}
+                            >
+                                Upload Another Photo
+                            </button>
+                        </div>
+                    ) : uploadSuccess && uploadedCaptions.length === 0 ? (
+                        <div className={styles.noMoreState}>
+                            <p className={styles.noMoreEmoji}>🗑️</p>
+                            <p className={styles.noMoreSub}>All captions deleted.</p>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSelectedFile(null)
+                                    setUploadProgress(0)
+                                    setUploadSuccess(false)
+                                    setUploadedImageUrl(null)
                                     setUploadedCaptionIndex(0)
                                     setUploadedFileName(null)
                                     setSavedCaptionIds(new Set())
@@ -697,8 +718,6 @@ const loadMyUploads = async () => {
     )
 }
 
-
-
 function Navbar({ user, onLogout, activeTab, setActiveTab, onEmailClick }: any) {
     const items: ('Rating' | 'Upload')[] = ['Rating', 'Upload']
     return (
@@ -727,4 +746,3 @@ function Navbar({ user, onLogout, activeTab, setActiveTab, onEmailClick }: any) 
         </div>
     )
 }
-
