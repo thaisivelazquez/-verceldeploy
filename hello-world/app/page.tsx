@@ -590,7 +590,7 @@ export default function Page() {
                                     setUploadedImageUrl(null)
                                     setUploadedCaptionIndex(0)
                                     setUploadedFileName(null)
-                                   git
+
                                 }}
                                 className={styles.navLogout}
                             >
