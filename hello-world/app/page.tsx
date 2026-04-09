@@ -26,7 +26,7 @@ export default function Page() {
         { id: string; caption: string; content: string; is_featured: boolean }[]
     >([])
     const [uploadedCaptionIndex, setUploadedCaptionIndex] = useState(0)
-    const [savedCaptionIds, setSavedCaptionIds] = useState<Set<string>>(new Set())
+
 
     const [showUploads, setShowUploads] = useState(false)
     const [myUploadedImages, setMyUploadedImages] = useState<
@@ -147,19 +147,7 @@ export default function Page() {
         setVotes(totals)
     }
 
-    const handleSaveCaption = async () => {
-        if (!user || uploadedCaptions.length === 0) return
-        const current = uploadedCaptions[uploadedCaptionIndex]
-        if (savedCaptionIds.has(current.id)) return
-        await supabase
-            .from('captions')
-            .update({ is_featured: true })
-            .eq('id', current.id)
-        setSavedCaptionIds(prev => new Set([...prev, current.id]))
-        setUploadedCaptions(prev =>
-            prev.map(c => c.id === current.id ? { ...c, is_featured: true } : c)
-        )
-    }
+
 
     const handleDeleteUploadedCaption = () => {
         setUploadedCaptions(prev => {
@@ -205,7 +193,7 @@ export default function Page() {
             setUploadedCaptions([])
             setUploadedCaptionIndex(0)
             setUploadedImageUrl(null)
-            setSavedCaptionIds(new Set())
+
 
             const { data: { session } } = await supabase.auth.getSession()
             const token = session?.access_token
@@ -376,7 +364,7 @@ export default function Page() {
     }
 
     const currentCaption = uploadedCaptions[uploadedCaptionIndex]
-    const currentIsSaved = currentCaption ? savedCaptionIds.has(currentCaption.id) : false
+
 
     return (
         <div className={styles.appBackground}>
@@ -424,12 +412,10 @@ export default function Page() {
                     <div className={styles.modalBox} onClick={e => e.stopPropagation()}>
                         <div className={styles.modalHeader}>
                             <div>
-                                <h2 className={styles.modalTitle}>My Saved Captions</h2>
-                                <p style={{ color: '#888', fontSize: 13, margin: '2px 0 0' }}>
-                                    {myUploadedImages.length} saved caption{myUploadedImages.length !== 1 ? 's' : ''} · your unfunny memes
-                                </p>
+
+
                             </div>
-                            <button className={styles.modalClose} onClick={() => setShowUploads(false)}>✕</button>
+
                         </div>
 
                         {loadingUploads ? (
@@ -438,9 +424,7 @@ export default function Page() {
                             <div style={{ textAlign: 'center', padding: '40px 20px' }}>
                                 <p style={{ fontSize: 40, margin: '0 0 12px' }}>📭</p>
                                 <p className={styles.modalEmpty}>No saved captions yet.</p>
-                                <p style={{ color: '#666', fontSize: 13, margin: '4px 0 0' }}>
-                                    Upload a photo and tap ♡ Save on a caption to see it here.
-                                </p>
+
                             </div>
                         ) : (
                             <div className={styles.modalGrid}>
@@ -544,23 +528,7 @@ export default function Page() {
                                     <p className={styles.ratingCaption}>
                                         "{currentCaption?.caption || currentCaption?.content}"
                                     </p>
-                                    <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 8 }}>
-                                        <button
-                                            type="button"
-                                            onClick={handleSaveCaption}
-                                            className={styles.navLogout}
-                                            disabled={currentIsSaved}
-                                        >
-                                            {currentIsSaved ? '✓ Saved' : '♡ Save'}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className={styles.deleteIconButton}
-                                            onClick={handleDeleteUploadedCaption}
-                                        >
-                                            🗑 Delete
-                                        </button>
-                                    </div>
+
                                 </div>
                             </div>
 
@@ -578,7 +546,8 @@ export default function Page() {
                                             key={c.id}
                                             type="button"
                                             onClick={() => setUploadedCaptionIndex(idx)}
-                                            className={`${styles.carouselDot} ${idx === uploadedCaptionIndex ? styles.carouselDotActive : ''} ${savedCaptionIds.has(c.id) ? styles.carouselDotSaved : ''}`}
+                                               className={`${styles.carouselDot}
+                                                ${idx === uploadedCaptionIndex ? styles.carouselDotActive : ''}`}
                                         />
                                     ))}
                                 </div>
@@ -740,9 +709,7 @@ function Navbar({ user, onLogout, activeTab, setActiveTab, onEmailClick }: any) 
                 ))}
             </div>
             <div className={styles.navRight}>
-                <button className={styles.navEmailButton} onClick={onEmailClick}>
-                    {user?.email}
-                </button>
+
                 <button onClick={onLogout} className={styles.navLogout}>Sign Out</button>
             </div>
         </div>
