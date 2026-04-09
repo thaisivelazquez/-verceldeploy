@@ -246,7 +246,7 @@ body {
 }
 
 .ratingCaption {
-    font-size: 14px;
+    font-size: 30px;
     color: #d1d5db;
     line-height: 1.5;
     margin: 0;
@@ -721,6 +721,7 @@ body {
     transition: width 0.2s ease;
 }
 .noMoreState {
+    display: flex;
     display: flex;
     flex-direction: column;
     align-items: center;
