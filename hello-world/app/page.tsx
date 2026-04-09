@@ -281,7 +281,7 @@ export default function Page() {
             setUploadedImageUrl(null)
             setUploadedCaptions([])
             setUploadedCaptionIndex(0)
-            setSavedCaptionIds(new Set())
+
             return
         }
         try {
@@ -293,7 +293,7 @@ export default function Page() {
             setUploadedImageUrl(null)
             setUploadedCaptions([])
             setUploadedCaptionIndex(0)
-            setSavedCaptionIds(new Set())
+
         } catch (err) {
             console.error(err)
             alert('Failed to delete image')
@@ -423,7 +423,7 @@ export default function Page() {
                         ) : myUploadedImages.length === 0 ? (
                             <div style={{ textAlign: 'center', padding: '40px 20px' }}>
                                 <p style={{ fontSize: 40, margin: '0 0 12px' }}>📭</p>
-                                <p className={styles.modalEmpty}>No saved captions yet.</p>
+
 
                             </div>
                         ) : (
@@ -570,7 +570,7 @@ export default function Page() {
                                     setUploadedCaptions([])
                                     setUploadedCaptionIndex(0)
                                     setUploadedFileName(null)
-                                    setSavedCaptionIds(new Set())
+
                                 }}
                                 className={styles.navLogout}
                             >
@@ -590,7 +590,7 @@ export default function Page() {
                                     setUploadedImageUrl(null)
                                     setUploadedCaptionIndex(0)
                                     setUploadedFileName(null)
-                                    setSavedCaptionIds(new Set())
+                                   git
                                 }}
                                 className={styles.navLogout}
                             >
