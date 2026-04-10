@@ -498,6 +498,7 @@ const handleUndoVote = async () => {
                 <div className={styles.pageWrapperCentered}>
                     <h1 className={styles.pageTitle}>Rate Captions</h1>
                     <div className={styles.pageTitle}>Click the arrows to vote on if a caption is funny or not!</div>
+                    <div className={styles.pageTitle}>If you want to create a meme yourself, select the upload switch!</div>
 
 
                     {lastVote && (
