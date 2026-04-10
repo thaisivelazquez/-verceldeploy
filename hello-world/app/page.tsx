@@ -14,7 +14,7 @@ export default function Page() {
     const [noMoreCaptions, setNoMoreCaptions] = useState(false)
     const [loadingCaptions, setLoadingCaptions] = useState(true)
     const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
-
+    const [lastVote, setLastVote] = useState<{ captionId: string; value: number } | null>(null)
     const [uploadProgress, setUploadProgress] = useState(0)
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
     const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
@@ -335,10 +335,45 @@ export default function Page() {
 
     const handleVote = (value: number, id: string) => {
         if (votedIds.has(id)) return
-        submitVote(value, id)
-        setVotes(prev => ({ ...prev, [id]: (prev[id] ?? 0) + value }))
-        setVotedIds(prev => new Set([...prev, id]))
+            submitVote(value, id)
+            setVotes(prev => ({ ...prev, [id]: (prev[id] ?? 0) + value }))
+            setVotedIds(prev => new Set([...prev, id]))
+
+
+            setLastVote({ captionId: id, value })
     }
+
+const handleUndoVote = async () => {
+    if (!user || !lastVote) return
+
+    const { captionId, value } = lastVote
+
+    await supabase
+        .from('caption_votes')
+        .delete()
+        .eq('profile_id', user.id)
+        .eq('caption_id', captionId)
+
+
+    setVotes(prev => ({
+        ...prev,
+        [captionId]: (prev[captionId] ?? 0) - value
+    }))
+
+    setVotedIds(prev => {
+        const next = new Set(prev)
+        next.delete(captionId)
+        return next
+    })
+
+
+    const localKey = `voted_${user.id}`
+    const existing: string[] = JSON.parse(localStorage.getItem(localKey) ?? '[]')
+    const updated = existing.filter(id => id !== captionId)
+    localStorage.setItem(localKey, JSON.stringify(updated))
+
+    setLastVote(null)
+}
 
     if (!user) {
         return (
@@ -463,6 +498,18 @@ export default function Page() {
                 <div className={styles.pageWrapperCentered}>
                     <h1 className={styles.pageTitle}>Rate Captions</h1>
                     <div className={styles.pageTitle}>Click the arrows to vote on if a caption is funny or not!</div>
+
+
+                    {lastVote && (
+                        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+                            <button
+                                onClick={handleUndoVote}
+                                className={styles.navLogout}
+                            >
+                                Undo Last Vote
+                            </button>
+                        </div>
+                    )}
 
 
                     {isExhausted ? (
