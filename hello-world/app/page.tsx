@@ -66,8 +66,6 @@ export default function Page() {
         return () => subscription.unsubscribe()
     }, [])
 
-
-
     useEffect(() => {
         const handleKey = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
@@ -78,44 +76,6 @@ export default function Page() {
         window.addEventListener('keydown', handleKey)
         return () => window.removeEventListener('keydown', handleKey)
     }, [])
-
-    useEffect(() => {
-        const ensureProfile = async (user: any) => {
-            const { error } = await supabase
-                .from('profiles')
-                .upsert(
-                    {
-                        id: user.id,
-                        email: user.email,
-                        full_name: user.user_metadata?.full_name ?? null,
-                        avatar_url: user.user_metadata?.avatar_url ?? null,
-                        is_admin: false,   // explicitly never admin
-                        created_at: new Date().toISOString(),
-                    },
-                    { onConflict: 'id', ignoreDuplicates: true }  // never overwrites existing rows
-                )
-            if (error) console.error('Profile upsert error:', error.message)
-        }
-
-        const getSession = async () => {
-            const { data: { session } } = await supabase.auth.getSession()
-            const u = session?.user ?? null
-            setUser(u)
-            if (u) await ensureProfile(u)
-        }
-        getSession()
-
-        const { data: { subscription } } =
-            supabase.auth.onAuthStateChange(async (_event, session) => {
-                const u = session?.user ?? null
-                setUser(u)
-                if (u) await ensureProfile(u)
-            })
-
-        return () => subscription.unsubscribe()
-    }, [])
-
-
 
     useEffect(() => {
         if (!user) return
@@ -538,6 +498,7 @@ const handleUndoVote = async () => {
                 <div className={styles.pageWrapperCentered}>
                     <h1 className={styles.pageTitle}>Rate Captions</h1>
                     <div className={styles.pageTitle}>Click the arrows to vote on if a caption is funny or not!</div>
+                    <div className={styles.pageTitle}>If you want to create a meme yourself, select the upload switch!</div>
 
 
                     {lastVote && (
