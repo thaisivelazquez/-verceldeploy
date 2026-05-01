@@ -53,19 +53,21 @@ export default function Page() {
         return [...arr].sort(() => rng() - 0.5)
     }
 
-    useEffect(() => {
-        const getSession = async () => {
-            const { data: { session } } = await supabase.auth.getSession()
-            setUser(session?.user ?? null)
+useEffect(() => {
+    const getSession = async () => {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session) {
+            await supabase.auth.setSession(session) // 👈 force hydrate
         }
-        getSession()
-        const { data: { subscription } } =
-            supabase.auth.onAuthStateChange((_event, session) => {
-                setUser(session?.user ?? null)
-            })
-        return () => subscription.unsubscribe()
-    }, [])
-
+        setUser(session?.user ?? null)
+    }
+    getSession()
+    const { data: { subscription } } =
+        supabase.auth.onAuthStateChange((_event, session) => {
+            setUser(session?.user ?? null)
+        })
+    return () => subscription.unsubscribe()
+}, [])
     useEffect(() => {
         const handleKey = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
@@ -250,13 +252,20 @@ const fetchVoteTotals = async (captionIds: string[]) => {
 
             if (Array.isArray(generatedCaptions)) {
                 const rows = generatedCaptions.map((c: any) => ({
-                    id: c.id,
-                    caption: c.caption,
                     content: c.content,
                     image_id: imageId,
+                    profile_id: user.id,
+                    created_by_user_id: user.id,
+                    modified_by_user_id: user.id,
+                    is_public: true,
+                    is_featured: false,
+                    like_count: 0,
                     created_datetime_utc: new Date().toISOString(),
-                    modified_datetime_utc: new Date().toISOString()
+                    modified_datetime_utc: new Date().toISOString(),
                 }))
+
+                const { error } = await supabase.from('captions').insert(rows)
+                if (error) console.error('Insert error:', error)
                 await supabase.from('captions').insert(rows)
                 const mapped = generatedCaptions.map((c: any) => ({
                     id: c.id,
