@@ -34,7 +34,7 @@ export default function Page() {
     >([])
     const [loadingUploads, setLoadingUploads] = useState(false)
 
-    const ITEMS_PER_PAGE = 50000
+    const ITEMS_PER_PAGE = 50
     const DISPLAY_LIMIT = 12
 
     const seededRandom = (seed: string) => {
@@ -134,18 +134,23 @@ export default function Page() {
         return shuffled
     }
 
-    const fetchVoteTotals = async (captionIds: string[]) => {
-        if (!captionIds.length) return
+const fetchVoteTotals = async (captionIds: string[]) => {
+    if (!captionIds.length) return
+    const BATCH_SIZE = 100
+    const totals: Record<string, number> = {}
+
+    for (let i = 0; i < captionIds.length; i += BATCH_SIZE) {
+        const batch = captionIds.slice(i, i + BATCH_SIZE)
         const { data } = await supabase
             .from('caption_votes')
             .select('caption_id, vote_value')
-            .in('caption_id', captionIds)
-        const totals: Record<string, number> = {}
+            .in('caption_id', batch)
         data?.forEach((row: any) => {
             totals[row.caption_id] = (totals[row.caption_id] ?? 0) + row.vote_value
         })
-        setVotes(totals)
     }
+    setVotes(totals)
+}
 
 
 
